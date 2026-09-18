@@ -43,7 +43,7 @@ def add_record():
 
 @app.route('/records/<int:record_id>', methods=['PUT'])
 def update_record(record_id):
-    record = Record.query.get_or_404(record_id)
+    record = db.get_or_404(Record, record_id)
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({"error": "Invalid request, 'name' is required"}), 400
@@ -54,7 +54,7 @@ def update_record(record_id):
 
 @app.route('/records/<int:record_id>', methods=['DELETE'])
 def delete_record(record_id):
-    record = Record.query.get_or_404(record_id)
+    record = db.get_or_404(Record, record_id)
     db.session.delete(record)
     db.session.commit()
     return jsonify({"message": f"Record {record_id} deleted successfully"}), 200
