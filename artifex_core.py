@@ -2,6 +2,10 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Welcome to Artifex Core API", "status": "active"})
+
 @app.route('/health/external', methods=['GET'])
 def health_external():
     return jsonify({"status": "healthy", "service": "artifex-core"})
