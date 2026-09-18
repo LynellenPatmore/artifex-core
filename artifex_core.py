@@ -538,3 +538,10 @@ def deposit_fiat(req: FiatDepositRequest):
             "external_tx_id": req.external_tx_id,
         },
     }
+from flask import Flask, url_for
+
+@app.route('/')
+def dashboard():
+    logo_url = url_for('static', filename='Aritfex.png')
+    return f'<img src="{logo_url}" alt="Artifex Logo">'
+
