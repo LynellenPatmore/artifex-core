@@ -303,3 +303,9 @@ def get_balances():
         return {account_id: balance for account_id, balance in rows}
     finally:
         conn.close()
+
+if __name__ == "__main__":
+            import os
+            import uvicorn
+            port = int(os.getenv("PORT" , 8000))
+            uvicorn.run("artifex_core:app" , host="0.0.0.0" , port=port)
