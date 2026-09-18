@@ -1,14 +1,13 @@
 import datetime
 from datetime import timezone
 import hashlib
-import json
 import sqlite3
 import uuid
+from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-app = FastAPI(title="Artifex Protocol API (SQLite Driven)")
 
 DB_FILE = "artifex.db"
 
@@ -71,7 +70,14 @@ def init_sqlite_db():
     conn.close()
 
 
-init_sqlite_db()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize DB schema on startup
+    init_sqlite_db()
+    yield
+
+
+app = FastAPI(title="Artifex Protocol API (SQLite Driven)", lifespan=lifespan)
 
 
 class PublicAgentManifest:
@@ -164,132 +170,136 @@ def get_manifest(agent_id: str):
 @app.post("/contract/create")
 def create_contract(req: ContractRequest):
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT balance FROM accounts WHERE account_id = ?", (req.client_id,)
-    )
-    row = cursor.fetchone()
+        cursor.execute(
+            "SELECT balance FROM accounts WHERE account_id = ?", (req.client_id,)
+        )
+        row = cursor.fetchone()
 
-    if not row or row[0] < req.amount:
-        conn.close()
-        raise HTTPException(
-            status_code=400, detail="Insufficient client funds."
+        if not row or row[0] < req.amount:
+            raise HTTPException(
+                status_code=400, detail="Insufficient client funds."
+            )
+
+        new_balance = row[0] - req.amount
+        cursor.execute(
+            "UPDATE accounts SET balance = ? WHERE account_id = ?",
+            (new_balance, req.client_id),
         )
 
-    new_balance = row[0] - req.amount
-    cursor.execute(
-        "UPDATE accounts SET balance = ? WHERE account_id = ?",
-        (new_balance, req.client_id),
-    )
+        contract_id = f"cnt_{uuid.uuid4().hex[:8]}"
+        cursor.execute(
+            "INSERT INTO escrow_vault VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                contract_id,
+                req.client_id,
+                req.primary_agent_id,
+                req.guarantor_id,
+                req.amount,
+                "ESCROWED",
+            ),
+        )
 
-    contract_id = f"cnt_{uuid.uuid4().hex[:8]}"
-    cursor.execute(
-        "INSERT INTO escrow_vault VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            contract_id,
-            req.client_id,
-            req.primary_agent_id,
-            req.guarantor_id,
-            req.amount,
-            "ESCROWED",
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-    return {"contract_id": contract_id, "status": "ESCROWED"}
+        conn.commit()
+        return {"contract_id": contract_id, "status": "ESCROWED"}
+    finally:
+        conn.close()
 
 
 @app.post("/contract/settle")
 def settle_contract(req: SettleRequest):
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT client_id, primary_agent_id, guarantor_id, amount, status FROM escrow_vault WHERE contract_id = ?",
-        (req.contract_id,),
-    )
-    contract = cursor.fetchone()
+        cursor.execute(
+            "SELECT client_id, primary_agent_id, guarantor_id, amount, status FROM escrow_vault WHERE contract_id = ?",
+            (req.contract_id,),
+        )
+        contract = cursor.fetchone()
 
-    if not contract or contract[4] != "ESCROWED":
+        if not contract or contract[4] != "ESCROWED":
+            raise HTTPException(
+                status_code=400, detail="Invalid or already settled contract."
+            )
+
+        client_id, primary_agent_id, guarantor_id, amount, _ = contract
+        deliverable_hash = hashlib.sha256(
+            req.deliverable_data.encode("utf-8")
+        ).hexdigest()
+
+        if not req.is_verified:
+            cursor.execute(
+                "UPDATE escrow_vault SET status = 'FAILED_RETRACTED' WHERE contract_id = ?",
+                (req.contract_id,),
+            )
+            cursor.execute(
+                "UPDATE accounts SET balance = balance + ? WHERE account_id = ?",
+                (amount, client_id),
+            )
+
+            receipt = PublicVerificationReceipt.generate_receipt(
+                req.contract_id,
+                primary_agent_id,
+                deliverable_hash,
+                "PUBLIC_RETRACTION",
+                "Failed verification.",
+            )
+        else:
+            primary_pay = amount * 0.70
+            secondary_pay = amount * 0.30
+            target_secondary = guarantor_id or client_id
+
+            cursor.execute(
+                "UPDATE escrow_vault SET status = 'SETTLED' WHERE contract_id = ?",
+                (req.contract_id,),
+            )
+
+            cursor.execute(
+                "INSERT INTO accounts (account_id, balance) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET balance = balance + ?",
+                (primary_agent_id, primary_pay, primary_pay),
+            )
+            cursor.execute(
+                "INSERT INTO accounts (account_id, balance) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET balance = balance + ?",
+                (target_secondary, secondary_pay, secondary_pay),
+            )
+
+            receipt = PublicVerificationReceipt.generate_receipt(
+                req.contract_id,
+                primary_agent_id,
+                deliverable_hash,
+                "VERIFIED_SUCCESS",
+            )
+
+        cursor.execute(
+            "INSERT INTO receipt_ledger VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                receipt["receipt_id"],
+                receipt["contract_id"],
+                receipt["agent_id"],
+                receipt["timestamp_utc"],
+                receipt["deliverable_hash"],
+                receipt["status"],
+                receipt["audit_trail_signature"],
+                receipt["correction_note"],
+            ),
+        )
+
+        conn.commit()
+        return receipt
+    finally:
         conn.close()
-        raise HTTPException(
-            status_code=400, detail="Invalid or already settled contract."
-        )
-
-    client_id, primary_agent_id, guarantor_id, amount, _ = contract
-    deliverable_hash = hashlib.sha256(
-        req.deliverable_data.encode("utf-8")
-    ).hexdigest()
-
-    if not req.is_verified:
-        cursor.execute(
-            "UPDATE escrow_vault SET status = 'FAILED_RETRACTED' WHERE contract_id = ?",
-            (req.contract_id,),
-        )
-        cursor.execute(
-            "UPDATE accounts SET balance = balance + ? WHERE account_id = ?",
-            (amount, client_id),
-        )
-
-        receipt = PublicVerificationReceipt.generate_receipt(
-            req.contract_id,
-            primary_agent_id,
-            deliverable_hash,
-            "PUBLIC_RETRACTION",
-            "Failed verification.",
-        )
-    else:
-        primary_pay = amount * 0.70
-        secondary_pay = amount * 0.30
-        target_secondary = guarantor_id or client_id
-
-        cursor.execute(
-            "UPDATE escrow_vault SET status = 'SETTLED' WHERE contract_id = ?",
-            (req.contract_id,),
-        )
-
-        cursor.execute(
-            "INSERT INTO accounts (account_id, balance) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET balance = balance + ?",
-            (primary_agent_id, primary_pay, primary_pay),
-        )
-        cursor.execute(
-            "INSERT INTO accounts (account_id, balance) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET balance = balance + ?",
-            (target_secondary, secondary_pay, secondary_pay),
-        )
-
-        receipt = PublicVerificationReceipt.generate_receipt(
-            req.contract_id,
-            primary_agent_id,
-            deliverable_hash,
-            "VERIFIED_SUCCESS",
-        )
-
-    cursor.execute(
-        "INSERT INTO receipt_ledger VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            receipt["receipt_id"],
-            receipt["contract_id"],
-            receipt["agent_id"],
-            receipt["timestamp_utc"],
-            receipt["deliverable_hash"],
-            receipt["status"],
-            receipt["audit_trail_signature"],
-            receipt["correction_note"],
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-    return receipt
 
 
 @app.get("/balances")
 def get_balances():
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT account_id, balance FROM accounts")
-    rows = cursor.fetchall()
-    conn.close()
-    return {account_id: balance for account_id, balance in rows}
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT account_id, balance FROM accounts")
+        rows = cursor.fetchall()
+        return {account_id: balance for account_id, balance in rows}
+    finally:
+        conn.close()
