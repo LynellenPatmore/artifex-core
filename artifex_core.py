@@ -1,8 +1,11 @@
-
-from flask import Flask, send_from_directory, render_template_string
 import os
+import httpx
+from flask import Flask, render_template_string, jsonify
 
 app = Flask(__name__, static_folder='static')
+
+# Target external URL to verify
+EXTERNAL_SITE_URL = "https://api.github.com"
 
 @app.route('/')
 def home():
@@ -24,7 +27,25 @@ def home():
 
 @app.route('/health')
 def health():
-    return {"status": "ok"}
+    return jsonify({"status": "ok"})
+
+@app.route('/health/external')
+def external_health():
+    try:
+        # Send a GET request to the external site with a 5-second timeout
+        response = httpx.get(EXTERNAL_SITE_URL, timeout=5.0)
+        is_reachable = response.status_code == 200
+        return jsonify({
+            "target_url": EXTERNAL_SITE_URL,
+            "status_code": response.status_code,
+            "reachable": is_reachable
+        }), 200 if is_reachable else 502
+    except Exception as e:
+        return jsonify({
+            "target_url": EXTERNAL_SITE_URL,
+            "reachable": False,
+            "error": str(e)
+        }), 502
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
