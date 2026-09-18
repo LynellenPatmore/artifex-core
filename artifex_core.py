@@ -1,10 +1,10 @@
+cat << 'EOF' > artifex_core.py
 import os
 import httpx
 from flask import Flask, render_template_string, jsonify
 
 app = Flask(__name__, static_folder='static')
 
-# Target external URL to verify
 EXTERNAL_SITE_URL = "https://api.github.com"
 
 @app.route('/')
@@ -32,7 +32,6 @@ def health():
 @app.route('/health/external')
 def external_health():
     try:
-        # Send a GET request to the external site with a 5-second timeout
         response = httpx.get(EXTERNAL_SITE_URL, timeout=5.0)
         is_reachable = response.status_code == 200
         return jsonify({
@@ -50,3 +49,4 @@ def external_health():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+EOF
