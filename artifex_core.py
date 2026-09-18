@@ -4,11 +4,12 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"message": "Welcome to Artifex Core API", "status": "active"})
+    return "Artifex Dashboard - Welcome to Artifex Core API", 200
 
+@app.route('/health', methods=['GET'])
 @app.route('/health/external', methods=['GET'])
 def health_external():
-    return jsonify({"status": "healthy", "service": "artifex-core"})
+    return jsonify({"status": "healthy", "service": "artifex-core"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
