@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: artifex-core
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn artifex_core:app
