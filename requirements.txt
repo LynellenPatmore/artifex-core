@@ -1,3 +1,7 @@
 fastapi[standard]
 uvicorn
 pydantic
+flask
+
+flask
+pytest

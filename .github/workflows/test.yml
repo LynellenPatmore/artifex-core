@@ -1,28 +1,28 @@
-name: Artifex Protocol CI Pipeline
+name: Run Pytest Suite
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "feat/add-dashboard-ui" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "feat/add-dashboard-ui" ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install fastapi uvicorn pytest httpx pydantic
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Run Pytest Suite
-      run: |
-        pytest test_artifex.py -v
+      - name: Run Pytest Suite
+        run: python -m pytest test_artifex.py -v
