@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
@@ -6,12 +6,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Example database model for Artifex records
 class Record(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
 
-# Initialize database tables within the app context
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
 with app.app_context():
     db.create_all()
 
@@ -23,6 +24,22 @@ def home():
 @app.route('/health/external', methods=['GET'])
 def health_external():
     return jsonify({"status": "ok"}), 200
+
+@app.route('/records', methods=['GET'])
+def get_records():
+    records = Record.query.all()
+    return jsonify([r.to_dict() for r in records]), 200
+
+@app.route('/records', methods=['POST'])
+def add_record():
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({"error": "Invalid request, 'name' is required"}), 400
+    
+    new_record = Record(name=data['name'])
+    db.session.add(new_record)
+    db.session.commit()
+    return jsonify(new_record.to_dict()), 201
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
