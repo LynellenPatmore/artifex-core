@@ -1,4 +1,4 @@
-Flask
-httpx
-pytest
-gunicorn
+Flask==3.0.2
+httpx==0.26.0
+pytest==8.0.0
+gunicorn==21.2.0
