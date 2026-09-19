@@ -28,8 +28,22 @@ template = {
     "schemes": ["https", "http"]
 }
 
-# Initialize Flasgger natively so /apidocs works out-of-the-box
-swagger = Swagger(app, template=template)
+# Disable default Flasgger UI route so we can render our own cohesive layout
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec_1',
+            "route": '/apispec_1.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda rule: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": False
+}
+
+swagger = Swagger(app, template=template, config=swagger_config)
 
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
@@ -135,7 +149,7 @@ def home():
                 </div>
             </div>
 
-            <!-- Economic Pillars (Each with a unique dedicated route) -->
+            <!-- Economic Pillars -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-8 border-t border-amber-500/10">
                 <a href="/registry" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
                     <div class="text-2xl group-hover:scale-110 transition">👤</div>
@@ -174,6 +188,98 @@ def home():
         <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
             <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
         </footer>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template), 200
+
+@app.route('/apidocs', methods=['GET'])
+def apidocs():
+    """Cohesive, Custom Artifex Styled API Documentation View"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Artifex | Protocol API Documentation</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
+            /* Custom dark theme styling overrides for Swagger UI */
+            .swagger-ui { color: #f8fafc; font-family: 'Inter', sans-serif; }
+            .swagger-ui .info { margin: 20px 0; }
+            .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info p, .swagger-ui .info table { color: #f8fafc !important; }
+            .swagger-ui .info a { color: #f59e0b !important; }
+            .swagger-ui .scheme-container { background: #0c0e15 !important; border-radius: 12px; box-shadow: none; border: 1px solid rgba(245, 158, 11, 0.1); padding: 15px; }
+            .swagger-ui .opblock { background: #0c0e15 !important; border: 1px solid rgba(245, 158, 11, 0.2) !important; border-radius: 12px !important; box-shadow: none !important; margin-bottom: 12px; }
+            .swagger-ui .opblock.is-open { background: #0e111a !important; }
+            .swagger-ui .opblock .opblock-summary-path { color: #f1f5f9 !important; font-family: monospace; }
+            .swagger-ui .opblock .opblock-summary-description { color: #94a3b8 !important; }
+            .swagger-ui .btn.authorize { background-color: transparent !important; border-color: #f59e0b !important; color: #f59e0b !important; border-radius: 8px; font-weight: 600; }
+            .swagger-ui .btn.authorize svg { fill: #f59e0b !important; }
+            .swagger-ui .btn.execute { background-color: #f59e0b !important; color: #090a0f !important; font-weight: 700; border-radius: 8px; }
+            .swagger-ui select, .swagger-ui input[type=text], .swagger-ui textarea { background: #0c0e15 !important; color: white !important; border: 1px solid rgba(245, 158, 11, 0.3) !important; border-radius: 8px; }
+            .swagger-ui .tab li { color: #cbd5e1; }
+            .swagger-ui .model-box { background: #0c0e15 !important; }
+            .swagger-ui table tspan, .swagger-ui table td, .swagger-ui table th { color: #cbd5e1 !important; }
+            .swagger-ui .opblock-tag { color: #f8fafc !important; border-bottom: 1px solid rgba(245, 158, 11, 0.1); font-weight: 700; }
+        </style>
+    </head>
+    <body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+        
+        <!-- Navbar -->
+        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
+                    <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
+                </div>
+                <nav class="flex items-center space-x-6">
+                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-400 transition">API Documentation</a>
+                    <a href="/registry" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
+                    <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content Container with Embedded Styled Swagger -->
+        <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
+            <div class="space-y-2">
+                <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
+                    <span>Developer Protocol</span>
+                </div>
+                <h1 class="text-3xl font-black text-white">API Documentation & Gateway</h1>
+                <p class="text-slate-400 text-sm">Interactive endpoints, schemas, and authorization protocols for autonomous AI agents and developers.</p>
+            </div>
+
+            <div class="bg-[#0c0e15] border border-amber-500/20 rounded-3xl p-8 shadow-2xl">
+                <div id="swagger-ui"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
+            <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
+        </footer>
+
+        <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+        <script>
+            window.onload = () => {
+                window.ui = SwaggerUIBundle({
+                    url: '/apispec_1.json',
+                    dom_id: '#swagger-ui',
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIBundle.SwaggerUIStandalonePreset
+                    ],
+                    layout: "BaseLayout"
+                });
+            };
+        </script>
     </body>
     </html>
     """
