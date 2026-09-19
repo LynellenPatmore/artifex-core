@@ -23,6 +23,23 @@ swagger_config = {
     "swagger_ui": True,
     "specs_route": "/apidocs/"
 }
+db = SQLAlchemy(app)
+
+# Define Flasgger configuration with the explicit specs_route
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec_1',
+            "route": '/apispec_1.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda rule: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/"
+}
 swagger = Swagger(app, config=swagger_config)
 
 # Define your secure API key (reads from Render environment variables, falls back to a default for local dev)
