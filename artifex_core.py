@@ -12,7 +12,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Custom Flasgger template with custom CSS injection for a sleek, secure SaaS feel
+# Custom Flasgger template with custom CSS injection to style the Swagger UI dark mode
 template = {
     "swagger": "2.0",
     "info": {
@@ -29,7 +29,72 @@ template = {
     "schemes": ["https", "http"]
 }
 
-# Injecting custom dark-mode styling into Flasgger so it matches the brand
+# Custom Swagger configuration with injected CSS to restyle the docs page
+custom_swagger_css = """
+<style>
+    body {
+        background-color: #090a0f !important;
+        color: #e2e8f0 !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    .swagger-ui .topbar {
+        background-color: #0c0e15 !important;
+        border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .swagger-ui .topbar a {
+        color: #f59e0b !important;
+    }
+    .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info h3, .swagger-ui .info h4, .swagger-ui .info p, .swagger-ui .info table {
+        color: #f8fafc !important;
+    }
+    .swagger-ui .info a {
+        color: #f59e0b !important;
+    }
+    .swagger-ui .scheme-container {
+        background: #0c0e15 !important;
+        box-shadow: none !important;
+        border-bottom: 1px solid rgba(245, 158, 11, 0.1);
+    }
+    .swagger-ui .opblock.opblock-get {
+        background: rgba(14, 165, 233, 0.05) !important;
+        border-color: rgba(14, 165, 233, 0.3) !important;
+    }
+    .swagger-ui .opblock.opblock-post {
+        background: rgba(16, 185, 129, 0.05) !important;
+        border-color: rgba(16, 185, 129, 0.3) !important;
+    }
+    .swagger-ui .opblock.opblock-put {
+        background: rgba(245, 158, 11, 0.05) !important;
+        border-color: rgba(245, 158, 11, 0.3) !important;
+    }
+    .swagger-ui .opblock.opblock-delete {
+        background: rgba(239, 68, 68, 0.05) !important;
+        border-color: rgba(239, 68, 68, 0.3) !important;
+    }
+    .swagger-ui .opblock .opblock-summary-path {
+        color: #f1f5f9 !important;
+    }
+    .swagger-ui .btn.authorize {
+        background-color: transparent !important;
+        border-color: #f59e0b !important;
+        color: #f59e0b !important;
+    }
+    .swagger-ui .btn.authorize:hover {
+        background-color: rgba(245, 158, 11, 0.1) !important;
+    }
+    .swagger-ui select {
+        background: #0c0e15 !important;
+        color: white !important;
+        border: 1px solid rgba(245, 158, 11, 0.3) !important;
+    }
+    .swagger-ui input[type=text] {
+        background: #0c0e15 !important;
+        color: white !important;
+        border: 1px solid rgba(245, 158, 11, 0.3) !important;
+    }
+</style>
+"""
+
 swagger_config = {
     "headers": [],
     "specs": [
@@ -42,7 +107,8 @@ swagger_config = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/apidocs/"
+    "specs_route": "/apidocs/",
+    "head_text": custom_swagger_css
 }
 
 swagger = Swagger(app, template=template, config=swagger_config)
@@ -146,7 +212,7 @@ def home():
                 </div>
             </div>
 
-            <!-- Economic Pillars (Interactive / Polished) -->
+            <!-- Economic Pillars -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-8 border-t border-amber-500/10">
                 <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">👤</div>
