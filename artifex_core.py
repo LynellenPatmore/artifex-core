@@ -2,7 +2,6 @@ from functools import wraps
 import os
 from flask import Flask, jsonify, request, render_template_string
 from flask_sqlalchemy import SQLAlchemy
-from flasgger import Swagger
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -10,65 +9,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Define Flasgger configuration with the explicit specs_route (Single instance)
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec_1',
-            "route": '/apispec_1.json',
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda rule: True,
-        }
-    ],
-    "static_url_path": "/flasgger_static",
-    "swagger_ui": True,
-    "specs_route": "/apidocs/"
-}
-# Initialize Swagger so it parses your docstrings into /apispec_1.json
-swagger = Swagger(app)
-
-@app.route('/apidocs', methods=['GET'])
-@app.route('/apidocs/', methods=['GET'])
-def cdn_apidocs():
-    """Bypass Flasgger internal blueprint 404s using official CDN Swagger UI"""
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Artifex Core - API Documentation</title>
-        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
-        <style>
-            body { margin: 0; background: #0f172a; }
-            .swagger-ui .topbar { background-color: #1e293b; }
-        </style>
-    </head>
-    <body>
-        <div id="swagger-ui"></div>
-        <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
-        <script>
-            window.onload = function() {
-                SwaggerUIBundle({
-                    url: "/apispec_1.json",
-                    dom_id: '#swagger-ui',
-                    presets: [
-                        SwaggerUIBundle.presets.apis,
-                        SwaggerUIBundle.StandaloneLayout
-                    ],
-                });
-            };
-        </script>
-    </body>
-    </html>
-    """)
-    from flask import redirect, url_for
-    try:
-        return redirect(url_for('flasgger.apidocs'))
-    except:
-        return redirect('/apidocs/index.html')
-
-# Define your secure API key (reads from Render environment variables, falls back to a default for local dev)
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
 def require_api_key(f):
@@ -92,12 +32,6 @@ with app.app_context():
 
 @app.route('/', methods=['GET'])
 def home():
-    """Artifex Dashboard Home
-    ---
-    responses:
-      200:
-        description: Renders the HTML dashboard page
-    """
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -128,122 +62,73 @@ def home():
 @app.route('/health', methods=['GET'])
 @app.route('/health/external', methods=['GET'])
 def health_external():
-    """Health Check Endpoint
-    ---
-    responses:
-      200:
-        description: Returns health status ok
-    """
     return jsonify({"status": "ok"}), 200
+
+@app.route('/apispec_1.json', methods=['GET'])
+def apispec():
+    return jsonify({
+        "swagger": "2.0",
+        "info": {"title": "Artifex Core API", "version": "1.0.0"},
+        "paths": {
+            "/health": {
+                "get": {"summary": "Health Check", "responses": {"200": {"description": "ok"}}}
+            },
+            "/records": {
+                "get": {"summary": "Get all records", "responses": {"200": {"description": "Success"}}},
+                "post": {"summary": "Create record", "responses": {"201": {"description": "Created"}}}
+            }
+        }
+    })
+
+@app.route('/apidocs', methods=['GET'])
+@app.route('/apidocs/', methods=['GET'])
+def custom_apidocs():
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex Core - API Documentation</title>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+        <style>
+            body { margin: 0; background: #0f172a; }
+            .swagger-ui .topbar { background-color: #1e293b; }
+        </style>
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+        <script>
+            window.onload = function() {
+                SwaggerUIBundle({
+                    url: "/apispec_1.json",
+                    dom_id: '#swagger-ui',
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIBundle.StandaloneLayout
+                    ],
+                });
+            };
+        </script>
+    </body>
+    </html>
+    """)
 
 @app.route('/records', methods=['GET'])
 def get_records():
-    """Retrieve all records
-    ---
-    responses:
-      200:
-        description: A list of all stored records
-    """
     records = Record.query.all()
     return jsonify([r.to_dict() for r in records]), 200
 
 @app.route('/records', methods=['POST'])
 @require_api_key
 def add_record():
-    """Create a new record (Protected)
-    ---
-    parameters:
-      - name: X-API-Key
-        in: header
-        type: string
-        required: true
-        description: Secret API Key
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            name:
-              type: string
-              example: "Sample Artifact"
-    responses:
-      201:
-        description: Record created successfully
-      401:
-        description: Unauthorized
-    """
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({"error": "Invalid request, 'name' is required"}), 400
-    
     new_record = Record(name=data['name'])
     db.session.add(new_record)
     db.session.commit()
     return jsonify(new_record.to_dict()), 201
-
-@app.route('/records/<int:record_id>', methods=['PUT'])
-@require_api_key
-def update_record(record_id):
-    """Update an existing record (Protected)
-    ---
-    parameters:
-      - name: X-API-Key
-        in: header
-        type: string
-        required: true
-      - name: record_id
-        in: path
-        type: integer
-        required: true
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            name:
-              type: string
-              example: "Updated Artifact"
-    responses:
-      200:
-        description: Record updated successfully
-      401:
-        description: Unauthorized
-    """
-    record = db.get_or_404(Record, record_id)
-    data = request.get_json()
-    if not data or 'name' not in data:
-        return jsonify({"error": "Invalid request, 'name' is required"}), 400
-    
-    record.name = data['name']
-    db.session.commit()
-    return jsonify(record.to_dict()), 200
-
-@app.route('/records/<int:record_id>', methods=['DELETE'])
-@require_api_key
-def delete_record(record_id):
-    """Delete a record (Protected)
-    ---
-    parameters:
-      - name: X-API-Key
-        in: header
-        type: string
-        required: true
-      - name: record_id
-        in: path
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Record deleted successfully
-      401:
-        description: Unauthorized
-    """
-    record = db.get_or_404(Record, record_id)
-    db.session.delete(record)
-    db.session.commit()
-    return jsonify({"message": f"Record {record_id} deleted successfully"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
