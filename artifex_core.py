@@ -1,3 +1,9 @@
+from functools import wraps
+import os
+from flask import Flask, jsonify, request, render_template_string
+from flask_sqlalchemy import SQLAlchemy
+from flasgger import Swagger
+
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
@@ -29,22 +35,6 @@ def apidocs_fallback():
         return redirect(url_for('flasgger.apidocs'))
     except:
         return redirect('/apidocs/index.html')
-# Define Flasgger configuration with the explicit specs_route
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec_1',
-            "route": '/apispec_1.json',
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda rule: True,
-        }
-    ],
-    "static_url_path": "/flasgger_static",
-    "swagger_ui": True,
-    "specs_route": "/apidocs/"
-}
-swagger = Swagger(app, config=swagger_config)
 
 # Define your secure API key (reads from Render environment variables, falls back to a default for local dev)
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
@@ -158,7 +148,7 @@ def add_record():
     new_record = Record(name=data['name'])
     db.session.add(new_record)
     db.session.commit()
-    return jsonify(new_key := new_record.to_dict()), 201
+    return jsonify(new_record.to_dict()), 201
 
 @app.route('/records/<int:record_id>', methods=['PUT'])
 @require_api_key
