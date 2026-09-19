@@ -14,7 +14,7 @@ def client():
 def test_home_route(client):
     response = client.get('/')
     assert response.status_code == 200
-    assert b'Artifex Dashboard' in response.data
+    assert b'Artifex Core' in response.data
 
 def test_health_route(client):
     response = client.get('/health')
