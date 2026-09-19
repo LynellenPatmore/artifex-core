@@ -1,3 +1,5 @@
+from functools import wraps
+import os
 from flask import Flask, jsonify, request, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger
@@ -7,6 +9,17 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 swagger = Swagger(app)
+
+API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_key = request.headers.get('X-API-Key')
+        if user_key and user_key == API_KEY:
+            return f(*args, **kwargs)
+        return jsonify({"error": "Unauthorized: Missing or invalid API key"}), 401
+    return decorated_function
 
 class Record(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -76,10 +89,16 @@ def get_records():
     return jsonify([r.to_dict() for r in records]), 200
 
 @app.route('/records', methods=['POST'])
+@require_api_key
 def add_record():
-    """Create a new record
+    """Create a new record (Protected)
     ---
     parameters:
+      - name: X-API-Key
+        in: header
+        type: string
+        required: true
+        description: Secret API Key
       - name: body
         in: body
         required: true
@@ -92,6 +111,8 @@ def add_record():
     responses:
       201:
         description: Record created successfully
+      401:
+        description: Unauthorized
     """
     data = request.get_json()
     if not data or 'name' not in data:
@@ -103,10 +124,15 @@ def add_record():
     return jsonify(new_record.to_dict()), 201
 
 @app.route('/records/<int:record_id>', methods=['PUT'])
+@require_api_key
 def update_record(record_id):
-    """Update an existing record
+    """Update an existing record (Protected)
     ---
     parameters:
+      - name: X-API-Key
+        in: header
+        type: string
+        required: true
       - name: record_id
         in: path
         type: integer
@@ -123,6 +149,8 @@ def update_record(record_id):
     responses:
       200:
         description: Record updated successfully
+      401:
+        description: Unauthorized
     """
     record = db.get_or_404(Record, record_id)
     data = request.get_json()
@@ -134,10 +162,15 @@ def update_record(record_id):
     return jsonify(record.to_dict()), 200
 
 @app.route('/records/<int:record_id>', methods=['DELETE'])
+@require_api_key
 def delete_record(record_id):
-    """Delete a record
+    """Delete a record (Protected)
     ---
     parameters:
+      - name: X-API-Key
+        in: header
+        type: string
+        required: true
       - name: record_id
         in: path
         type: integer
@@ -145,6 +178,8 @@ def delete_record(record_id):
     responses:
       200:
         description: Record deleted successfully
+      401:
+        description: Unauthorized
     """
     record = db.get_or_404(Record, record_id)
     db.session.delete(record)
