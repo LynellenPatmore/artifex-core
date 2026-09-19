@@ -25,11 +25,43 @@ swagger_config = {
     "swagger_ui": True,
     "specs_route": "/apidocs/"
 }
-swagger = Swagger(app, config=swagger_config)
+# Initialize Swagger so it parses your docstrings into /apispec_1.json
+swagger = Swagger(app)
 
 @app.route('/apidocs', methods=['GET'])
 @app.route('/apidocs/', methods=['GET'])
-def apidocs_fallback():
+def cdn_apidocs():
+    """Bypass Flasgger internal blueprint 404s using official CDN Swagger UI"""
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex Core - API Documentation</title>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+        <style>
+            body { margin: 0; background: #0f172a; }
+            .swagger-ui .topbar { background-color: #1e293b; }
+        </style>
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+        <script>
+            window.onload = function() {
+                SwaggerUIBundle({
+                    url: "/apispec_1.json",
+                    dom_id: '#swagger-ui',
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIBundle.StandaloneLayout
+                    ],
+                });
+            };
+        </script>
+    </body>
+    </html>
+    """)
     from flask import redirect, url_for
     try:
         return redirect(url_for('flasgger.apidocs'))
