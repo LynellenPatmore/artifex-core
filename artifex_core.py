@@ -130,5 +130,24 @@ def add_record():
     db.session.commit()
     return jsonify(new_record.to_dict()), 201
 
+@app.route('/records/<int:record_id>', methods=['PUT'])
+@require_api_key
+def update_record(record_id):
+    record = db.get_or_404(Record, record_id)
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({"error": "Invalid request, 'name' is required"}), 400
+    record.name = data['name']
+    db.session.commit()
+    return jsonify(record.to_dict()), 200
+
+@app.route('/records/<int:record_id>', methods=['DELETE'])
+@require_api_key
+def delete_record(record_id):
+    record = db.get_or_404(Record, record_id)
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"message": f"Record {record_id} deleted successfully"}), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
