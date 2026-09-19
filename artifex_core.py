@@ -12,7 +12,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# OpenAPI Template for automated JSON generation
+# OpenAPI Template for generating the raw JSON schema spec
 template = {
     "swagger": "2.0",
     "info": {
@@ -29,8 +29,22 @@ template = {
     "schemes": ["https", "http"]
 }
 
-# Initialize Flasgger to generate the spec JSON at /apispec_1.json
-swagger = Swagger(app, template=template)
+# Disable Flasgger's default UI so we can serve our own polished layout
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec_1',
+            "route": '/apispec_1.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda rule: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": False
+}
+
+swagger = Swagger(app, template=template, config=swagger_config)
 
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
@@ -84,8 +98,8 @@ def home():
                     <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
                 </div>
                 <nav class="flex items-center space-x-6">
-                    <a href="/" class="text-sm font-medium text-amber-400 transition">Home</a>
-                    <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
+                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-400 transition">API Documentation</a>
                     <a href="/records" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
                     <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
                 </nav>
@@ -116,7 +130,6 @@ def home():
                     </div>
                 </div>
 
-                <!-- Brand Image -->
                 <div class="lg:col-span-6">
                     <div class="relative rounded-3xl p-1 bg-gradient-to-b from-amber-500/40 via-amber-500/10 to-transparent glow-border">
                         <div class="bg-[#0c0e15] rounded-[22px] overflow-hidden shadow-2xl">
@@ -172,7 +185,7 @@ def home():
 
 @app.route('/apidocs', methods=['GET'])
 def apidocs():
-    """Custom Embedded API Documentation Page maintaining exact site layout"""
+    """Custom Embedded API Documentation Page matching exact site layout"""
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -185,7 +198,6 @@ def apidocs():
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
             body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
-            /* Custom theme overrides for embedded Swagger UI to blend seamlessly */
             .swagger-ui { color: #f8fafc; }
             .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info p { color: #f8fafc !important; }
             .swagger-ui .info a { color: #f59e0b !important; }
