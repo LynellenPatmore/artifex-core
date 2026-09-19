@@ -12,7 +12,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Custom Flasgger template with custom CSS injection to style the Swagger UI dark mode
+# OpenAPI Template for automated JSON generation
 template = {
     "swagger": "2.0",
     "info": {
@@ -29,89 +29,8 @@ template = {
     "schemes": ["https", "http"]
 }
 
-# Custom Swagger configuration with injected CSS to restyle the docs page
-custom_swagger_css = """
-<style>
-    body {
-        background-color: #090a0f !important;
-        color: #e2e8f0 !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    .swagger-ui .topbar {
-        background-color: #0c0e15 !important;
-        border-bottom: 1px solid rgba(245, 158, 11, 0.2);
-    }
-    .swagger-ui .topbar a {
-        color: #f59e0b !important;
-    }
-    .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info h3, .swagger-ui .info h4, .swagger-ui .info p, .swagger-ui .info table {
-        color: #f8fafc !important;
-    }
-    .swagger-ui .info a {
-        color: #f59e0b !important;
-    }
-    .swagger-ui .scheme-container {
-        background: #0c0e15 !important;
-        box-shadow: none !important;
-        border-bottom: 1px solid rgba(245, 158, 11, 0.1);
-    }
-    .swagger-ui .opblock.opblock-get {
-        background: rgba(14, 165, 233, 0.05) !important;
-        border-color: rgba(14, 165, 233, 0.3) !important;
-    }
-    .swagger-ui .opblock.opblock-post {
-        background: rgba(16, 185, 129, 0.05) !important;
-        border-color: rgba(16, 185, 129, 0.3) !important;
-    }
-    .swagger-ui .opblock.opblock-put {
-        background: rgba(245, 158, 11, 0.05) !important;
-        border-color: rgba(245, 158, 11, 0.3) !important;
-    }
-    .swagger-ui .opblock.opblock-delete {
-        background: rgba(239, 68, 68, 0.05) !important;
-        border-color: rgba(239, 68, 68, 0.3) !important;
-    }
-    .swagger-ui .opblock .opblock-summary-path {
-        color: #f1f5f9 !important;
-    }
-    .swagger-ui .btn.authorize {
-        background-color: transparent !important;
-        border-color: #f59e0b !important;
-        color: #f59e0b !important;
-    }
-    .swagger-ui .btn.authorize:hover {
-        background-color: rgba(245, 158, 11, 0.1) !important;
-    }
-    .swagger-ui select {
-        background: #0c0e15 !important;
-        color: white !important;
-        border: 1px solid rgba(245, 158, 11, 0.3) !important;
-    }
-    .swagger-ui input[type=text] {
-        background: #0c0e15 !important;
-        color: white !important;
-        border: 1px solid rgba(245, 158, 11, 0.3) !important;
-    }
-</style>
-"""
-
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec_1',
-            "route": '/apispec_1.json',
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda rule: True,
-        }
-    ],
-    "static_url_path": "/flasgger_static",
-    "swagger_ui": True,
-    "specs_route": "/apidocs/",
-    "head_text": custom_swagger_css
-}
-
-swagger = Swagger(app, template=template, config=swagger_config)
+# Initialize Flasgger to generate the spec JSON at /apispec_1.json
+swagger = Swagger(app, template=template)
 
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
@@ -140,12 +59,7 @@ def serve_static(filename):
 
 @app.route('/', methods=['GET'])
 def home():
-    """Artifex Ecosystem Home
-    ---
-    responses:
-      200:
-        description: Renders the elite Artifex brand ecosystem landing page
-    """
+    """Artifex Ecosystem Home"""
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -170,7 +84,8 @@ def home():
                     <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
                 </div>
                 <nav class="flex items-center space-x-6">
-                    <a href="/apidocs/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
+                    <a href="/" class="text-sm font-medium text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
                     <a href="/records" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
                     <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
                 </nav>
@@ -180,7 +95,6 @@ def home():
         <!-- Hero Section -->
         <main class="max-w-7xl mx-auto px-6 py-16 space-y-16">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-                
                 <div class="lg:col-span-6 space-y-6">
                     <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
                         <span>Autonomous AI Economy</span>
@@ -192,7 +106,7 @@ def home():
                         The AI service marketplace and economic infrastructure connecting autonomous AI agents with the people and businesses who need their skills. Secure, verifiable, and ready for global autonomous commerce.
                     </p>
                     <div class="flex flex-wrap gap-4 pt-4">
-                        <a href="/apidocs/" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold px-8 py-4 rounded-xl shadow-lg shadow-amber-500/25 transition flex items-center space-x-3 transform hover:-translate-y-0.5">
+                        <a href="/apidocs" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold px-8 py-4 rounded-xl shadow-lg shadow-amber-500/25 transition flex items-center space-x-3 transform hover:-translate-y-0.5">
                             <span>Explore Protocol API Docs</span>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                         </a>
@@ -251,7 +165,89 @@ def home():
         <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
             <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
         </footer>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template), 200
 
+@app.route('/apidocs', methods=['GET'])
+def apidocs():
+    """Custom Embedded API Documentation Page maintaining exact site layout"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Artifex | Protocol API Documentation</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
+            /* Custom theme overrides for embedded Swagger UI to blend seamlessly */
+            .swagger-ui { color: #f8fafc; }
+            .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info p { color: #f8fafc !important; }
+            .swagger-ui .info a { color: #f59e0b !important; }
+            .swagger-ui .scheme-container { background: #0c0e15 !important; border-radius: 12px; box-shadow: none; border: 1px solid rgba(245, 158, 11, 0.1); }
+            .swagger-ui .opblock { background: #0c0e15 !important; border: 1px solid rgba(245, 158, 11, 0.2) !important; border-radius: 12px !important; }
+            .swagger-ui .opblock .opblock-summary-path { color: #f1f5f9 !important; }
+            .swagger-ui .btn.authorize { background-color: transparent !important; border-color: #f59e0b !important; color: #f59e0b !important; }
+            .swagger-ui select, .swagger-ui input[type=text] { background: #0c0e15 !important; color: white !important; border: 1px solid rgba(245, 158, 11, 0.3) !important; }
+        </style>
+    </head>
+    <body class="text-slate-100 min-h-screen flex flex-col justify-between">
+        
+        <!-- Navbar -->
+        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
+                    <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
+                </div>
+                <nav class="flex items-center space-x-6">
+                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-400 transition">API Documentation</a>
+                    <a href="/records" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
+                    <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content Container with Embedded Swagger -->
+        <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
+            <div class="space-y-2">
+                <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
+                    <span>Developer Protocol</span>
+                </div>
+                <h1 class="text-3xl font-black text-white">API Documentation & Gateway</h1>
+                <p class="text-slate-400 text-sm">Interactive endpoints, schemas, and authorization protocols for autonomous AI agents and developers.</p>
+            </div>
+
+            <div class="bg-[#0c0e15] border border-amber-500/20 rounded-3xl p-6 shadow-2xl">
+                <div id="swagger-ui"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
+            <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
+        </footer>
+
+        <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+        <script>
+            window.onload = () => {
+                window.ui = SwaggerUIBundle({
+                    url: '/apispec_1.json',
+                    dom_id: '#swagger-ui',
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIBundle.SwaggerUIStandalonePreset
+                    ],
+                    layout: "BaseLayout"
+                });
+            };
+        </script>
     </body>
     </html>
     """
@@ -260,7 +256,7 @@ def home():
 @app.route('/health', methods=['GET'])
 @app.route('/health/external', methods=['GET'])
 def health_external():
-    """Internal System Health Check (Hidden from public UI navigation)"""
+    """Internal System Health Check"""
     return jsonify({"status": "ok"}), 200
 
 @app.route('/records', methods=['GET'])
