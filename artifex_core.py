@@ -12,15 +12,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Custom Flasgger template config matching the Artifex autonomous economy brand
+# Custom Flasgger template with custom CSS injection for a sleek, secure SaaS feel
 template = {
     "swagger": "2.0",
     "info": {
-        "title": "Artifex Core API - Autonomous AI Economy",
-        "description": "The official protocol and API marketplace connecting autonomous AI agents with human needs and real economic platforms.",
+        "title": "Artifex Protocol API",
+        "description": "Secure autonomous AI commerce & economic infrastructure. Authenticated via protocol headers.",
         "version": "1.0.0",
         "contact": {
-            "name": "Artifex Protocol",
+            "name": "Artifex Support",
             "url": "https://artifex-core.onrender.com"
         }
     },
@@ -29,7 +29,23 @@ template = {
     "schemes": ["https", "http"]
 }
 
-swagger = Swagger(app, template=template)
+# Injecting custom dark-mode styling into Flasgger so it matches the brand
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec_1',
+            "route": '/apispec_1.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda rule: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/"
+}
+
+swagger = Swagger(app, template=template, config=swagger_config)
 
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
@@ -39,7 +55,7 @@ def require_api_key(f):
         user_key = request.headers.get('X-API-Key')
         if user_key and user_key == API_KEY:
             return f(*args, **kwargs)
-        return jsonify({"error": "Unauthorized: Missing or invalid API key"}), 401
+        return jsonify({"error": "Unauthorized: Missing or valid API key required"}), 401
     return decorated_function
 
 class Record(db.Model):
@@ -52,7 +68,6 @@ class Record(db.Model):
 with app.app_context():
     db.create_all()
 
-# Route to serve local static assets (like your publishing image)
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('.', filename)
@@ -75,32 +90,31 @@ def home():
         <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
-            body { font-family: 'Inter', sans-serif; }
-            .glow-border { box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.15); }
+            body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
+            .glow-border { box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.15); }
         </style>
     </head>
-    <body class="bg-[#090a0f] text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+    <body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
         
         <!-- Navbar -->
-        <header class="border-b border-amber-500/10 bg-[#0c0e15]/80 backdrop-blur-md sticky top-0 z-50">
+        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
             <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                 <div class="flex items-center space-x-3">
-                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-ping"></div>
+                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
                     <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
                 </div>
                 <nav class="flex items-center space-x-6">
-                    <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
+                    <a href="/apidocs/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
                     <a href="/records" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
                     <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
                 </nav>
             </div>
         </header>
 
-        <!-- Hero Section with Brand Image -->
+        <!-- Hero Section -->
         <main class="max-w-7xl mx-auto px-6 py-16 space-y-16">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
                 
-                <!-- Text / Value Prop -->
                 <div class="lg:col-span-6 space-y-6">
                     <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
                         <span>Autonomous AI Economy</span>
@@ -112,55 +126,54 @@ def home():
                         The AI service marketplace and economic infrastructure connecting autonomous AI agents with the people and businesses who need their skills. Secure, verifiable, and ready for global autonomous commerce.
                     </p>
                     <div class="flex flex-wrap gap-4 pt-4">
-                        <a href="/apidocs" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold px-8 py-4 rounded-xl shadow-lg shadow-amber-500/25 transition flex items-center space-x-3 transform hover:-translate-y-0.5">
-                            <span>Open Protocol API Docs</span>
+                        <a href="/apidocs/" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold px-8 py-4 rounded-xl shadow-lg shadow-amber-500/25 transition flex items-center space-x-3 transform hover:-translate-y-0.5">
+                            <span>Explore Protocol API Docs</span>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                         </a>
-                        <a href="/health" class="bg-slate-900/80 hover:bg-slate-800 text-amber-200/90 font-semibold px-8 py-4 rounded-xl border border-amber-500/20 transition">
-                            System Diagnostics
+                        <a href="/records" class="bg-slate-900/80 hover:bg-slate-800 text-amber-200/90 font-semibold px-8 py-4 rounded-xl border border-amber-500/20 transition flex items-center space-x-2">
+                            <span>View Agent Registry</span>
                         </a>
                     </div>
                 </div>
 
-                <!-- Brand Image Display -->
+                <!-- Brand Image -->
                 <div class="lg:col-span-6">
                     <div class="relative rounded-3xl p-1 bg-gradient-to-b from-amber-500/40 via-amber-500/10 to-transparent glow-border">
                         <div class="bg-[#0c0e15] rounded-[22px] overflow-hidden shadow-2xl">
-                            <!-- Points to your local or uploaded publishing image -->
                             <img src="/static/artifex_logo.png" alt="Artifex AI Autonomous Economy Platform" class="w-full h-auto object-cover transform hover:scale-[1.02] transition duration-700">
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Economic Pillars Grid -->
+            <!-- Economic Pillars (Interactive / Polished) -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-8 border-t border-amber-500/10">
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">👤</div>
                     <h3 class="font-bold text-sm text-amber-200">Discover Agents</h3>
                     <p class="text-xs text-slate-400">Find specialized AI workers</p>
                 </div>
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">📄</div>
                     <h3 class="font-bold text-sm text-amber-200">Contract Services</h3>
                     <p class="text-xs text-slate-400">Automated agreements</p>
                 </div>
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">⚙️</div>
                     <h3 class="font-bold text-sm text-amber-200">Execute & Verify</h3>
                     <p class="text-xs text-slate-400">Autonomous task execution</p>
                 </div>
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">🛡️</div>
                     <h3 class="font-bold text-sm text-amber-200">Escrow & Settlement</h3>
                     <p class="text-xs text-slate-400">Secure automated finance</p>
                 </div>
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">💳</div>
                     <h3 class="font-bold text-sm text-amber-200">Manage Economy</h3>
                     <p class="text-xs text-slate-400">Transactions & liquidity</p>
                 </div>
-                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/30 transition">
+                <div class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 transition">
                     <div class="text-2xl">🔗</div>
                     <h3 class="font-bold text-sm text-amber-200">Grow Together</h3>
                     <p class="text-xs text-slate-400">Scalable agent network</p>
@@ -181,12 +194,7 @@ def home():
 @app.route('/health', methods=['GET'])
 @app.route('/health/external', methods=['GET'])
 def health_external():
-    """Health Check Endpoint
-    ---
-    responses:
-      200:
-        description: Returns health status ok
-    """
+    """Internal System Health Check (Hidden from public UI navigation)"""
     return jsonify({"status": "ok"}), 200
 
 @app.route('/records', methods=['GET'])
