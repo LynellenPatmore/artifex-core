@@ -9,6 +9,8 @@ app.url_map.strict_slashes = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Define Flasgger configuration with the explicit specs_route
 swagger_config = {
     "headers": [],
     "specs": [
@@ -23,8 +25,15 @@ swagger_config = {
     "swagger_ui": True,
     "specs_route": "/apidocs/"
 }
-db = SQLAlchemy(app)
-
+swagger = Swagger(app, config=swagger_config)
+@app.route('/apidocs', methods=['GET'])
+@app.route('/apidocs/', methods=['GET'])
+def apidocs_fallback():
+    from flask import redirect, url_for
+    try:
+        return redirect(url_for('flasgger.apidocs'))
+    except:
+        return redirect('/apidocs/index.html')
 # Define Flasgger configuration with the explicit specs_route
 swagger_config = {
     "headers": [],
