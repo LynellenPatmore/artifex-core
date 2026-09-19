@@ -14,7 +14,7 @@ def client():
 def test_home_route(client):
     response = client.get('/')
     assert response.status_code == 200
-    assert b'Artifex Core' in response.data
+    assert b'ARTIFEX' in response.data
 
 def test_health_route(client):
     response = client.get('/health')
@@ -22,7 +22,7 @@ def test_health_route(client):
     assert response.json == {"status": "ok"}
 
 def test_unauthorized_access(client):
-    res = client.post('/records', json={"name": "Hacker Artifact"})
+    res = client.post('/records', json={"name": "Hacker Agent"})
     assert res.status_code == 401
 
 def test_crud_records_with_auth(client):
@@ -32,15 +32,15 @@ def test_crud_records_with_auth(client):
     assert res.status_code == 200
     assert res.json == []
 
-    res = client.post('/records', json={"name": "Test Artifact"}, headers=headers)
+    res = client.post('/records', json={"name": "Test AI Agent"}, headers=headers)
     assert res.status_code == 201
     data = res.json
-    assert data['name'] == "Test Artifact"
+    assert data['name'] == "Test AI Agent"
     record_id = data['id']
 
-    res = client.put(f'/records/{record_id}', json={"name": "Updated Artifact"}, headers=headers)
+    res = client.put(f'/records/{record_id}', json={"name": "Updated AI Agent"}, headers=headers)
     assert res.status_code == 200
-    assert res.json['name'] == "Updated Artifact"
+    assert res.json['name'] == "Updated AI Agent"
 
     res = client.delete(f'/records/{record_id}', headers=headers)
     assert res.status_code == 200
