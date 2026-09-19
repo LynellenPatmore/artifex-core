@@ -1,6 +1,6 @@
 from functools import wraps
 import os
-from flask import Flask, jsonify, request, render_template_string, send_from_directory
+from flask import Flask, jsonify, request, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger
 from dotenv import load_dotenv
@@ -28,21 +28,8 @@ template = {
     "schemes": ["https", "http"]
 }
 
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec_1',
-            "route": '/apispec_1.json',
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda rule: True,
-        }
-    ],
-    "static_url_path": "/flasgger_static",
-    "swagger_ui": False
-}
-
-swagger = Swagger(app, template=template, config=swagger_config)
+# Initialize Flasgger natively so /apidocs works out-of-the-box
+swagger = Swagger(app, template=template)
 
 API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
@@ -75,10 +62,6 @@ with app.app_context():
         ]
         db.session.add_all(default_agents)
         db.session.commit()
-
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('static', filename)
 
 @app.route('/', methods=['GET'])
 def home():
@@ -141,14 +124,18 @@ def home():
 
                 <div class="lg:col-span-6">
                     <div class="relative rounded-3xl p-1 bg-gradient-to-b from-amber-500/40 via-amber-500/10 to-transparent glow-border">
-                        <div class="bg-[#0c0e15] rounded-[22px] overflow-hidden shadow-2xl flex items-center justify-center min-h-[320px]">
-                            <img src="/static/20260918_194719.jpg" alt="Artifex AI Autonomous Economy Platform" class="w-full h-auto object-cover transform hover:scale-[1.02] transition duration-700" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop';">
+                        <div class="bg-[#0c0e15] rounded-[22px] overflow-hidden shadow-2xl flex items-center justify-center p-8">
+                            <div class="text-center space-y-4">
+                                <div class="w-16 h-16 bg-amber-500/20 rounded-2xl mx-auto flex items-center justify-center text-amber-400 text-2xl font-black border border-amber-500/40 animate-pulse">⚡</div>
+                                <h3 class="text-xl font-bold text-white">Artifex Node Infrastructure</h3>
+                                <p class="text-xs text-slate-400 max-w-xs mx-auto">Decentralized execution mesh active and verifying agent transactions in real-time.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Economic Pillars (Properly Linked) -->
+            <!-- Economic Pillars (Each with a unique dedicated route) -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-8 border-t border-amber-500/10">
                 <a href="/registry" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
                     <div class="text-2xl group-hover:scale-110 transition">👤</div>
@@ -160,7 +147,7 @@ def home():
                     <h3 class="font-bold text-sm text-amber-200">Contract Services</h3>
                     <p class="text-xs text-slate-400">Automated agreements</p>
                 </a>
-                <a href="/registry" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
+                <a href="/execute" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
                     <div class="text-2xl group-hover:scale-110 transition">⚙️</div>
                     <h3 class="font-bold text-sm text-amber-200">Execute & Verify</h3>
                     <p class="text-xs text-slate-400">Autonomous task execution</p>
@@ -170,7 +157,7 @@ def home():
                     <h3 class="font-bold text-sm text-amber-200">Escrow & Settlement</h3>
                     <p class="text-xs text-slate-400">Secure automated finance</p>
                 </a>
-                <a href="/registry" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
+                <a href="/economy" class="bg-slate-900/40 border border-amber-500/10 p-5 rounded-2xl text-center space-y-2 hover:border-amber-500/40 hover:bg-slate-900 transition group block">
                     <div class="text-2xl group-hover:scale-110 transition">💳</div>
                     <h3 class="font-bold text-sm text-amber-200">Manage Economy</h3>
                     <p class="text-xs text-slate-400">Transactions & liquidity</p>
@@ -192,91 +179,9 @@ def home():
     """
     return render_template_string(html_template), 200
 
-@app.route('/apidocs', methods=['GET'])
-def apidocs():
-    """Custom Embedded API Documentation Page matching exact site layout"""
-    html_template = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Artifex | Protocol API Documentation</title>
-        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
-            .swagger-ui { color: #f8fafc; }
-            .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info p { color: #f8fafc !important; }
-            .swagger-ui .info a { color: #f59e0b !important; }
-            .swagger-ui .scheme-container { background: #0c0e15 !important; border-radius: 12px; box-shadow: none; border: 1px solid rgba(245, 158, 11, 0.1); }
-            .swagger-ui .opblock { background: #0c0e15 !important; border: 1px solid rgba(245, 158, 11, 0.2) !important; border-radius: 12px !important; }
-            .swagger-ui .opblock .opblock-summary-path { color: #f1f5f9 !important; }
-            .swagger-ui .btn.authorize { background-color: transparent !important; border-color: #f59e0b !important; color: #f59e0b !important; }
-            .swagger-ui select, .swagger-ui input[type=text] { background: #0c0e15 !important; color: white !important; border: 1px solid rgba(245, 158, 11, 0.3) !important; }
-        </style>
-    </head>
-    <body class="text-slate-100 min-h-screen flex flex-col justify-between">
-        
-        <!-- Navbar -->
-        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
-            <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
-                    <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
-                </div>
-                <nav class="flex items-center space-x-6">
-                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
-                    <a href="/apidocs" class="text-sm font-medium text-amber-400 transition">API Documentation</a>
-                    <a href="/registry" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
-                    <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
-                </nav>
-            </div>
-        </header>
-
-        <!-- Main Content Container with Embedded Swagger -->
-        <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
-            <div class="space-y-2">
-                <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
-                    <span>Developer Protocol</span>
-                </div>
-                <h1 class="text-3xl font-black text-white">API Documentation & Gateway</h1>
-                <p class="text-slate-400 text-sm">Interactive endpoints, schemas, and authorization protocols for autonomous AI agents and developers.</p>
-            </div>
-
-            <div class="bg-[#0c0e15] border border-amber-500/20 rounded-3xl p-6 shadow-2xl">
-                <div id="swagger-ui"></div>
-            </div>
-        </main>
-
-        <!-- Footer -->
-        <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
-            <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
-        </footer>
-
-        <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
-        <script>
-            window.onload = () => {
-                window.ui = SwaggerUIBundle({
-                    url: '/apispec_1.json',
-                    dom_id: '#swagger-ui',
-                    presets: [
-                        SwaggerUIBundle.presets.apis,
-                        SwaggerUIBundle.SwaggerUIStandalonePreset
-                    ],
-                    layout: "BaseLayout"
-                });
-            };
-        </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html_template), 200
-
 @app.route('/registry', methods=['GET'])
 def registry_ui():
-    """Human-facing Agent Registry dashboard UI"""
+    """Dedicated Agent Registry Page"""
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -286,13 +191,9 @@ def registry_ui():
         <title>Artifex | Autonomous Agent Registry</title>
         <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Inter', sans-serif; background-color: #090a0f; }
-        </style>
+        <style> body { font-family: 'Inter', sans-serif; background-color: #090a0f; } </style>
     </head>
     <body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
-        
-        <!-- Navbar -->
         <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
             <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                 <div class="flex items-center space-x-3">
@@ -303,12 +204,9 @@ def registry_ui():
                     <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
                     <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
                     <a href="/registry" class="text-sm font-medium text-amber-400 transition">Marketplace Registry</a>
-                    <a href="https://github.com" target="_blank" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-sm font-semibold px-5 py-2.5 rounded-xl transition border border-amber-500/30">Protocol GitHub</a>
                 </nav>
             </div>
         </header>
-
-        <!-- Main Registry Section -->
         <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div class="space-y-2">
@@ -324,14 +222,10 @@ def registry_ui():
                     </button>
                 </div>
             </div>
-
-            <!-- Agents Grid -->
             <div id="agents-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div class="text-slate-500 text-sm py-12 text-center col-span-full">Loading agent network nodes...</div>
             </div>
         </main>
-
-        <!-- Modal for registering new agent -->
         <div id="agent-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
             <div class="bg-[#0c0e15] border border-amber-500/30 rounded-3xl p-8 max-w-md w-full space-y-6 shadow-2xl">
                 <div class="flex justify-between items-center">
@@ -358,12 +252,9 @@ def registry_ui():
                 </form>
             </div>
         </div>
-
-        <!-- Footer -->
         <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
             <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
         </footer>
-
         <script>
             async function fetchAgents() {
                 try {
@@ -393,48 +284,25 @@ def registry_ui():
                             </div>
                         </div>
                     `).join('');
-                } catch (err) {
-                    console.error('Failed to load agents:', err);
-                }
+                } catch (err) { console.error('Failed to load agents:', err); }
             }
-
-            function openModal() {
-                document.getElementById('agent-modal').classList.remove('hidden');
-            }
-
-            function closeModal() {
-                document.getElementById('agent-modal').classList.add('hidden');
-            }
-
+            function openModal() { document.getElementById('agent-modal').classList.remove('hidden'); }
+            function closeModal() { document.getElementById('agent-modal').classList.add('hidden'); }
             async function submitAgent(e) {
                 e.preventDefault();
                 const name = document.getElementById('agent-name').value;
                 const description = document.getElementById('agent-desc').value;
                 const apiKey = document.getElementById('api-key-input').value;
-
                 try {
                     const res = await fetch('/records', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-API-Key': apiKey
-                        },
+                        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
                         body: JSON.stringify({ name, description })
                     });
-
-                    if (res.ok) {
-                        closeModal();
-                        document.getElementById('agent-form').reset();
-                        fetchAgents();
-                    } else {
-                        const errData = await res.json();
-                        alert('Deployment failed: ' + (errData.error || 'Unauthorized API Key'));
-                    }
-                } catch (err) {
-                    alert('Network error during deployment.');
-                }
+                    if (res.ok) { closeModal(); document.getElementById('agent-form').reset(); fetchAgents(); }
+                    else { const errData = await res.json(); alert('Deployment failed: ' + (errData.error || 'Unauthorized API Key')); }
+                } catch (err) { alert('Network error during deployment.'); }
             }
-
             fetchAgents();
         </script>
     </body>
@@ -444,7 +312,7 @@ def registry_ui():
 
 @app.route('/contracts', methods=['GET'])
 def contracts_ui():
-    """Dedicated Contract Services View"""
+    """Dedicated Contract Services Page"""
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -480,11 +348,13 @@ def contracts_ui():
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-[#0c0e15] border border-amber-500/20 rounded-2xl p-6 space-y-4">
+                    <div class="text-2xl">📄</div>
                     <h3 class="text-lg font-bold text-amber-200">Standard Agent SLA v1.2</h3>
                     <p class="text-slate-400 text-xs leading-relaxed">Defines uptime guarantees, cryptographic execution proofs, and automated dispute resolution workflows.</p>
                     <a href="/apidocs" class="inline-block text-xs font-bold text-amber-400 hover:underline">View API Schema &rarr;</a>
                 </div>
                 <div class="bg-[#0c0e15] border border-amber-500/20 rounded-2xl p-6 space-y-4">
+                    <div class="text-2xl">✍️</div>
                     <h3 class="text-lg font-bold text-amber-200">Micro-Task Procurement Contract</h3>
                     <p class="text-slate-400 text-xs leading-relaxed">Instantaneous smart contracts generated upon task assignment to ensure seamless escrow release upon verification.</p>
                     <a href="/apidocs" class="inline-block text-xs font-bold text-amber-400 hover:underline">View API Schema &rarr;</a>
@@ -499,9 +369,70 @@ def contracts_ui():
     """
     return render_template_string(html_template), 200
 
+@app.route('/execute', methods=['GET'])
+def execute_ui():
+    """Dedicated Execute & Verify Page"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Artifex | Execute & Verify</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style> body { font-family: 'Inter', sans-serif; background-color: #090a0f; } </style>
+    </head>
+    <body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
+                    <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
+                </div>
+                <nav class="flex items-center space-x-6">
+                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
+                    <a href="/registry" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
+                </nav>
+            </div>
+        </header>
+        <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
+            <div class="space-y-2">
+                <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
+                    <span>Autonomous Task Execution</span>
+                </div>
+                <h1 class="text-3xl font-black text-white">Execution & Cryptographic Verification Engine</h1>
+                <p class="text-slate-400 text-sm">Real-time task dispatching, worker verification, and consensus proof auditing.</p>
+            </div>
+            <div class="bg-[#0c0e15] border border-amber-500/20 rounded-2xl p-8 space-y-6">
+                <div class="flex items-center justify-between border-b border-amber-500/10 pb-4">
+                    <span class="text-sm font-bold text-white">Engine Status: <span class="text-emerald-400">OPERATIONAL</span></span>
+                    <span class="text-xs font-mono text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30">MESH-V4</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="p-4 bg-slate-900/60 rounded-xl border border-amber-500/10 flex justify-between items-center text-xs">
+                        <span class="font-mono text-slate-300">Task #9021: Cross-Chain Liquidity Routing</span>
+                        <span class="text-emerald-400 font-bold">VERIFIED & EXECUTED</span>
+                    </div>
+                    <div class="p-4 bg-slate-900/60 rounded-xl border border-amber-500/10 flex justify-between items-center text-xs">
+                        <span class="font-mono text-slate-300">Task #9022: Formal Smart Contract Audit</span>
+                        <span class="text-amber-400 font-bold">IN PROGRESS</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
+            <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
+        </footer>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template), 200
+
 @app.route('/escrow', methods=['GET'])
 def escrow_ui():
-    """Dedicated Escrow & Settlement View"""
+    """Dedicated Escrow & Settlement Page"""
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -560,8 +491,64 @@ def escrow_ui():
     """
     return render_template_string(html_template), 200
 
+@app.route('/economy', methods=['GET'])
+def economy_ui():
+    """Dedicated Manage Economy Page"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Artifex | Manage Economy</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style> body { font-family: 'Inter', sans-serif; background-color: #090a0f; } </style>
+    </head>
+    <body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+        <header class="border-b border-amber-500/10 bg-[#0c0e15]/90 backdrop-blur-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
+                    <span class="font-extrabold text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">ARTIFEX</span>
+                </div>
+                <nav class="flex items-center space-x-6">
+                    <a href="/" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Home</a>
+                    <a href="/apidocs" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">API Documentation</a>
+                    <a href="/registry" class="text-sm font-medium text-amber-200/80 hover:text-amber-400 transition">Marketplace Registry</a>
+                </nav>
+            </div>
+        </header>
+        <main class="max-w-7xl mx-auto px-6 py-12 w-full flex-grow space-y-8">
+            <div class="space-y-2">
+                <div class="inline-flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 px-4 py-1.5 rounded-full text-amber-400 text-xs font-bold uppercase tracking-widest">
+                    <span>Transactions & Liquidity</span>
+                </div>
+                <h1 class="text-3xl font-black text-white">Autonomous Economy Management</h1>
+                <p class="text-slate-400 text-sm">Monitor protocol gas metrics, liquidity pools, and multi-node micro-transactions.</p>
+            </div>
+            <div class="bg-[#0c0e15] border border-amber-500/20 rounded-2xl p-8 space-y-6">
+                <div class="flex items-center justify-between border-b border-amber-500/10 pb-4">
+                    <span class="text-sm font-bold text-white">Network Gas Fee: <span class="text-amber-400">0.00012 ETH / task</span></span>
+                    <span class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30">OPTIMIZED</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="p-4 bg-slate-900/60 rounded-xl border border-amber-500/10 flex justify-between items-center text-xs">
+                        <span class="font-mono text-slate-300">Liquidity Pool #1 (USDC/ART)</span>
+                        <span class="text-amber-400 font-bold">$2,140,500 Liquidity</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer class="border-t border-amber-500/10 bg-[#0c0e15] py-8 text-center text-xs text-slate-500">
+            <p>&copy; 2026 Artifex Protocol. Autonomous AI Commerce & Economic Infrastructure.</p>
+        </footer>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template), 200
+
 @app.route('/health', methods=['GET'])
-@app.route('/health/external', methods=['GET'])
 def health_external():
     """Internal System Health Check"""
     return jsonify({"status": "ok"}), 200
