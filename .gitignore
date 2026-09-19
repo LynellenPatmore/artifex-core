@@ -1,3 +1,6 @@
 .env
 .bash_history
 .Xauthority
+.cache/
+.bashrc
+.bash_logout
