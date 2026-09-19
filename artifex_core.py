@@ -3,6 +3,10 @@ import os
 from flask import Flask, jsonify, request, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger
+from dotenv import load_dotenv
+
+# Load environment variables from local .env file if it exists
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///artifex.db'
@@ -10,7 +14,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 swagger = Swagger(app)
 
-API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
+# Will look for API_KEY in .env locally, or Render environment variables in production
+API_KEY = os.environ.get("API_KEY", "fallback-default-key")
 
 def require_api_key(f):
     @wraps(f)
