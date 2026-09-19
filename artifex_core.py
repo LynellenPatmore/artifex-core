@@ -5,7 +5,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger
 from dotenv import load_dotenv
 
-# Load environment variables from local .env file if it exists
 load_dotenv()
 
 app = Flask(__name__)
@@ -14,8 +13,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 swagger = Swagger(app)
 
-# Will look for API_KEY in .env locally, or Render environment variables in production
-API_KEY = os.environ.get("API_KEY", "fallback-default-key")
+API_KEY = os.environ.get("API_KEY", "artifex-secret-key-123")
 
 def require_api_key(f):
     @wraps(f)
@@ -42,7 +40,7 @@ def home():
     ---
     responses:
       200:
-        description: Renders the HTML dashboard page
+        description: Renders the professional SaaS landing page
     """
     html_template = """
     <!DOCTYPE html>
@@ -50,22 +48,69 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Artifex Dashboard</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .card { background: #1e293b; padding: 2rem 3rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; max-width: 500px; width: 100%; }
-            h1 { color: #38bdf8; margin-bottom: 0.5rem; }
-            p { color: #94a3b8; margin-bottom: 1.5rem; }
-            .btn { display: inline-block; background: #0284c7; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600; transition: background 0.2s; }
-            .btn:hover { background: #0369a1; }
-        </style>
+        <title>Artifex Core | Professional CRUD API & Dashboard</title>
+        <!-- Tailwind CSS CDN for modern styling -->
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     </head>
-    <body>
-        <div class="card">
-            <h1>Artifex Dashboard</h1>
-            <p>Welcome to the Artifex Core API. Your backend and database are live and operational.</p>
-            <a href="/apidocs" class="btn">Open API Docs (Swagger)</a>
-        </div>
+    <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-white">
+        
+        <!-- Navbar -->
+        <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+            <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span class="font-bold text-lg tracking-tight text-white">Artifex Core</span>
+                </div>
+                <nav class="flex items-center space-x-4">
+                    <a href="/apidocs" class="text-sm font-medium text-slate-300 hover:text-white transition">API Docs</a>
+                    <a href="/records" class="text-sm font-medium text-slate-300 hover:text-white transition">Records Endpoint</a>
+                    <a href="https://github.com" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold px-4 py-2 rounded-lg transition border border-slate-700">GitHub</a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="max-w-6xl mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-2 gap-12 items-center my-auto">
+            <div class="space-y-6">
+                <div class="inline-flex items-center space-x-2 bg-cyan-500/10 border border-cyan-500/20 px-3 py-1 rounded-full text-cyan-400 text-xs font-semibold uppercase tracking-wider">
+                    <span>Production Ready</span>
+                </div>
+                <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Secure, Scalable <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">CRUD API Backend</span>
+                </h1>
+                <p class="text-slate-400 text-lg leading-relaxed">
+                    Welcome to Artifex Core. Powered by Flask, SQLAlchemy, and SQLite, featuring robust API key security and interactive OpenAPI documentation.
+                </p>
+                <div class="flex flex-wrap gap-4 pt-2">
+                    <a href="/apidocs" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold px-6 py-3 rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center space-x-2">
+                        <span>Explore Swagger Docs</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                    <a href="/health" class="bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold px-6 py-3 rounded-xl border border-slate-800 transition">
+                        System Health
+                    </a>
+                </div>
+            </div>
+
+            <!-- Publishing Image / Hero Card -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-900/80 p-4 rounded-2xl border border-slate-800 shadow-2xl relative group">
+                <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition"></div>
+                <!-- Replace the src below with your actual publishing image URL or asset -->
+                <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center min-h-[300px]">
+                    <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop" alt="Artifex Publishing Image" class="w-full h-full object-cover rounded-lg opacity-90 hover:scale-105 transition duration-500">
+                </div>
+                <div class="mt-4 px-2 flex justify-between items-center text-xs text-slate-400 font-mono">
+                    <span>STATUS: ONLINE</span>
+                    <span>DATABASE: ACTIVE</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-slate-800/80 bg-slate-900/30 py-6 text-center text-xs text-slate-500">
+            <p>&copy; 2026 Artifex Core. Built with Flask & Render.</p>
+        </footer>
+
     </body>
     </html>
     """
