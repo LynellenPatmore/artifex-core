@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger
 
@@ -24,9 +24,34 @@ def home():
     ---
     responses:
       200:
-        description: Returns welcome message
+        description: Renders the HTML dashboard page
     """
-    return "Artifex Dashboard - Welcome to Artifex Core API", 200
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Artifex Dashboard</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .card { background: #1e293b; padding: 2rem 3rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; max-width: 500px; width: 100%; }
+            h1 { color: #38bdf8; margin-bottom: 0.5rem; }
+            p { color: #94a3b8; margin-bottom: 1.5rem; }
+            .btn { display: inline-block; background: #0284c7; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600; transition: background 0.2s; }
+            .btn:hover { background: #0369a1; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Artifex Dashboard</h1>
+            <p>Welcome to the Artifex Core API. Your backend and database are live and operational.</p>
+            <a href="/apidocs" class="btn">Open API Docs (Swagger)</a>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template), 200
 
 @app.route('/health', methods=['GET'])
 @app.route('/health/external', methods=['GET'])
