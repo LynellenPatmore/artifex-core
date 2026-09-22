@@ -252,3 +252,27 @@ def agent_hub():
 @app.get("/health")
 def health_check():
     return {"status": "online", "protocol": "Artifex Core"}
+
+@app.post("/client/register-profile")
+def register_client_profile(profile: ClientProfileRegister):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO client_profiles (client_email, company_name, balance)
+         VALUES (?, ?, 0.0)
+         ON CONFLICT(client_email) DO UPDATE SET company_name=excluded.company_name
+    """, (profile.client_email, profile.company_name))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "client_email": profile.client_email}
+
+@app.post("/agent/register-profile")
+def register_agent_profile(profile: AgentProfileRegister):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO agent_profiles (agent_id, home_site_url, settlement_currency) VALUES (?, ?, ?) ON CONFLICT(agent_id) DO UPDATE SET home_site_url=excluded.home_site_url, settlement_currency=excluded.settlement_currency",
+                   (profile.agent_id, profile.home_site_url, profile.settlement_currency))
+    cursor.execute("INSERT OR IGNORE INTO agent_banks (agent_id, balance) VALUES (?, 0.0)", (profile.agent_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
