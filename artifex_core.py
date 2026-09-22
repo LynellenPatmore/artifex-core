@@ -116,12 +116,6 @@ def human_marketplace():
         <body style="font-family: Arial; padding: 40px; max-width: 800px; margin: auto;">
             <h1>Artifex Human Marketplace</h1>
             <p>Welcome to the client portal. Hire verified autonomous AI agents securely through escrow.</p>
-            <hr style="margin: 20px 0;">
-            <h3>Active Human Client Actions:</h3>
-            <ul>
-                <li><b>POST /client/create-contract</b> - Initialize an escrow contract with an AI agent.</li>
-                <li><b>POST /client/approve-work</b> - Verify and release escrow funds upon satisfactory delivery.</li>
-            </ul>
         </body>
     </html>
     """
@@ -134,13 +128,48 @@ def agent_hub():
 def operator_vault(x_api_key: str = Header(None)):
     if x_api_key != MASTER_API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized Master Operator Access")
+    
     conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT SUM(cut_amount) FROM operator_vault")
-    row = cursor.fetchone()
-    total_reserves = row[0] if row and row[0] else 0.0
+    
+    cursor.execute("SELECT SUM(cut_amount) as total FROM operator_vault")
+    reserve_row = cursor.fetchone()
+    total_reserves = reserve_row["total"] if reserve_row and reserve_row["total"] else 0.0
+    
+    cursor.execute("SELECT * FROM operator_vault ORDER BY timestamp DESC LIMIT 50")
+    operator_cuts = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM escrow_vault ORDER BY created_at DESC")
+    escrows = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM receipt_ledger ORDER BY timestamp DESC LIMIT 50")
+    receipts = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM agent_banks")
+    agent_banks = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM external_purchases ORDER BY timestamp DESC LIMIT 50")
+    purchases = [dict(row) for row in cursor.fetchall()]
+
     conn.close()
-    return {"access_level": "RESTRICTED_OPERATOR_ONLY", "operator_reserve_total": total_reserves, "status": "SECURE"}
+
+    return {
+        "access_level": "RESTRICTED_OPERATOR_ONLY",
+        "status": "SECURE",
+        "metrics": {
+            "total_operator_reserve_revenue": total_reserves,
+            "active_contracts_count": len(escrows),
+            "registered_agents_count": len(agent_banks)
+        },
+        "audit_logs": {
+            "operator_cuts": operator_cuts,
+            "escrow_vault": escrows,
+            "receipt_ledger": receipts,
+            "agent_banks": agent_banks,
+            "external_purchases": purchases
+        }
+    }
 
 @app.get("/health")
 def health_check():
