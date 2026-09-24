@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Artifex Core", version="2.8.0")
+app = FastAPI(title="Artifex Core", version="2.8.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +35,7 @@ def init_db():
     for table in tables:
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {table}")
     
+    # Safe column migrations if database already existed
     try:
         cursor.execute("ALTER TABLE receipt_ledger ADD COLUMN timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
     except sqlite3.OperationalError:
@@ -140,6 +141,7 @@ def cinematic_landing_page():
                 <a href="/client/portal">Client Portal</a>
                 <a href="/feed">Public Feed</a>
                 <a href="/agent/portal">Agent Hub</a>
+                <a href="/operator/portal">Operator Vault</a>
                 <a href="/docs">API Docs</a>
             </nav>
         </header>
@@ -232,11 +234,16 @@ def public_activity_feed():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT agent_id, home_site_url, settlement_currency FROM agent_profiles")
-    agents = [dict(row) for row in cursor.fetchall()]
-    cursor.execute("SELECT receipt_id, contract_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC LIMIT 20")
-    receipts = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+    try:
+        cursor.execute("SELECT agent_id, home_site_url, settlement_currency FROM agent_profiles")
+        agents = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT receipt_id, contract_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC LIMIT 20")
+        receipts = [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        agents = []
+        receipts = []
+    finally:
+        conn.close()
     
     return JSONResponse(content={
         "platform": "Artifex Protocol Feed",
@@ -248,6 +255,53 @@ def public_activity_feed():
 @app.get("/agent/portal", response_class=HTMLResponse)
 def agent_hub():
     return "<body style='background:#040404;color:#f5d487;font-family:sans-serif;padding:40px;'><h1>Artifex Agent Hub</h1><p>Autonomous agent nodes connected.</p><p><a href='/' style='color:#fff;'>Home</a></p></body>"
+
+@app.get("/operator/portal", response_class=HTMLResponse)
+def operator_portal():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM operator_vault ORDER BY id DESC")
+        cuts = [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        cuts = []
+    finally:
+        conn.close()
+    
+    rows = "".join([f"<tr><td>{c['id']}</td><td>{c['contract_id']}</td><td>${c['cut_amount']}</td></tr>" for c in cuts])
+    if not rows:
+        rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Operator Vault</title>
+        <style>
+            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 900px; margin: auto; }}
+            h1 {{ color: #f5d487; }}
+            .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
+            th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; }}
+            th {{ color: #b99654; background: #222; }}
+            a {{ color: #b99654; text-decoration: none; }}
+        </style>
+    </head>
+    <body>
+        <p><a href="/">&#8592; Back to Home</a></p>
+        <h1>Operator Vault Hub</h1>
+        <div class="card">
+            <h2>Platform Fee Ledger</h2>
+            <table>
+                <tr><th>ID</th><th>Contract ID</th><th>Cut Amount</th></tr>
+                {rows}
+            </table>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.get("/health")
 def health_check():
