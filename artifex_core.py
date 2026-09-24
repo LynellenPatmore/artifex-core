@@ -1,13 +1,15 @@
 import os
 import sqlite3
 import requests
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Artifex Core", version="2.8.1")
+app = FastAPI(title="Artifex Core", version="2.8.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +21,17 @@ app.add_middleware(
 
 MASTER_API_KEY = os.getenv("MASTER_API_KEY", "artifex-master-secret-999")
 DB_FILE = "artifex.db"
+security = HTTPBasic()
+
+def verify_operator(credentials: HTTPBasicCredentials = Depends(security)):
+    correct_password = secrets.compare_digest(credentials.password, MASTER_API_KEY)
+    if not correct_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect operator credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -35,7 +48,6 @@ def init_db():
     for table in tables:
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {table}")
     
-    # Safe column migrations if database already existed
     try:
         cursor.execute("ALTER TABLE receipt_ledger ADD COLUMN timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
     except sqlite3.OperationalError:
@@ -141,7 +153,6 @@ def cinematic_landing_page():
                 <a href="/client/portal">Client Portal</a>
                 <a href="/feed">Public Feed</a>
                 <a href="/agent/portal">Agent Hub</a>
-                <a href="/operator/portal">Operator Vault</a>
                 <a href="/docs">API Docs</a>
             </nav>
         </header>
@@ -239,7 +250,7 @@ def public_activity_feed():
         agents = [dict(row) for row in cursor.fetchall()]
         cursor.execute("SELECT receipt_id, contract_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC LIMIT 20")
         receipts = [dict(row) for row in cursor.fetchall()]
-    except Exception as e:
+    except Exception:
         agents = []
         receipts = []
     finally:
@@ -257,31 +268,37 @@ def agent_hub():
     return "<body style='background:#040404;color:#f5d487;font-family:sans-serif;padding:40px;'><h1>Artifex Agent Hub</h1><p>Autonomous agent nodes connected.</p><p><a href='/' style='color:#fff;'>Home</a></p></body>"
 
 @app.get("/operator/portal", response_class=HTMLResponse)
-def operator_portal():
+def operator_portal(operator: str = Depends(verify_operator)):
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     try:
         cursor.execute("SELECT * FROM operator_vault ORDER BY id DESC")
         cuts = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM escrow_vault")
+        escrows = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM client_profiles")
+        clients = [dict(row) for row in cursor.fetchall()]
     except Exception:
         cuts = []
+        escrows = []
+        clients = []
     finally:
         conn.close()
     
-    rows = "".join([f"<tr><td>{c['id']}</td><td>{c['contract_id']}</td><td>${c['cut_amount']}</td></tr>" for c in cuts])
-    if not rows:
-        rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
+    cut_rows = "".join([f"<tr><td>{c['id']}</td><td>{c['contract_id']}</td><td>${c['cut_amount']}</td></tr>" for c in cuts])
+    if not cut_rows:
+        cut_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
 
     return f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Artifex | Operator Vault</title>
+        <title>Artifex | Operator Hub</title>
         <style>
-            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 900px; margin: auto; }}
-            h1 {{ color: #f5d487; }}
+            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1000px; margin: auto; }}
+            h1, h2 {{ color: #f5d487; }}
             .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
             th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; }}
@@ -291,12 +308,13 @@ def operator_portal():
     </head>
     <body>
         <p><a href="/">&#8592; Back to Home</a></p>
-        <h1>Operator Vault Hub</h1>
+        <h1>Operator Hub (Restricted Access)</h1>
+        
         <div class="card">
-            <h2>Platform Fee Ledger</h2>
+            <h2>Operator Vault & Platform Fee Ledger</h2>
             <table>
                 <tr><th>ID</th><th>Contract ID</th><th>Cut Amount</th></tr>
-                {rows}
+                {cut_rows}
             </table>
         </div>
     </body>
