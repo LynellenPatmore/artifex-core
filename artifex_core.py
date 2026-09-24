@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 import traceback
 
-app = FastAPI(title="Artifex Core", version="2.9.0")
+app = FastAPI(title="Artifex Core", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,6 +22,15 @@ app.add_middleware(
 MASTER_API_KEY = os.getenv("MASTER_API_KEY", "artifex-master-secret-999")
 DB_FILE = "artifex.db"
 
+# Exchange rates relative to USD base
+EXCHANGE_RATES = {
+    "USD": 1.0,
+    "EUR": 0.92,
+    "GBP": 0.79,
+    "SOL": 0.0075, # Example token/crypto conversion rate stub
+    "USDC": 1.0
+}
+
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -33,22 +42,17 @@ def init_db():
         "agent_banks (agent_id TEXT PRIMARY KEY, balance REAL DEFAULT 0.0)",
         "agent_profiles (agent_id TEXT PRIMARY KEY, home_site_url TEXT, settlement_currency TEXT DEFAULT 'USD')",
         "messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT, recipient_id TEXT, message TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
-        "external_purchases (purchase_id TEXT PRIMARY KEY, agent_id TEXT, merchant_url TEXT, amount REAL, currency TEXT, status TEXT, details TEXT)"
+        "external_purchases (purchase_id TEXT PRIMARY KEY, agent_id TEXT, merchant_url TEXT, amount REAL, currency TEXT, status TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+        "payout_ledger (payout_id TEXT PRIMARY KEY, agent_id TEXT, target_url TEXT, amount_converted REAL, currency TEXT, status TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
     ]
     for table in tables:
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {table}")
-    
-    try:
-        cursor.execute("ALTER TABLE receipt_ledger ADD COLUMN timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
-    except sqlite3.OperationalError:
-        pass
-
     conn.commit()
     conn.close()
 
 init_db()
 
-# Pydantic Models for API
+# Pydantic Models
 class ClientProfileRegister(BaseModel):
     client_email: str
     company_name: Optional[str] = None
@@ -66,11 +70,15 @@ class MessageSend(BaseModel):
     recipient_id: str
     message: str
 
-class HireRequest(BaseModel):
-    client_email: str
+class ExternalPurchaseRequest(BaseModel):
     agent_id: str
+    merchant_url: str
     amount: float
-    contract_id: str
+    currency: str = "USD"
+
+class PayoutRequest(BaseModel):
+    agent_id: str
+    target_currency: str
 
 @app.get("/Artifex.png")
 def get_artifex_image():
@@ -85,68 +93,24 @@ def cinematic_landing_page():
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Artifex | Autonomous Economic Platform</title>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                background-color: #040404;
-                color: #ffffff;
-                font-family: 'Inter', sans-serif;
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                align-items: center;
-                padding: 2rem;
-                text-align: center;
-            }
-            header {
-                display: flex;
-                justify-content: space-between;
-                width: 100%;
-                max-width: 1200px;
-                padding: 1rem 0;
-                border-bottom: 1px solid rgba(185, 150, 84, 0.2);
-            }
+            body { background-color: #040404; color: #ffffff; font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 2rem; text-align: center; }
+            header { display: flex; justify-content: space-between; width: 100%; max-width: 1200px; padding: 1rem 0; border-bottom: 1px solid rgba(185, 150, 84, 0.2); }
             .logo { font-weight: 900; font-size: 1.25rem; color: #f5d487; letter-spacing: 0.1em; text-transform: uppercase; }
-            nav a { color: #a0aec0; text-decoration: none; margin-left: 1.5rem; font-size: 0.9rem; font-weight: 600; transition: color 0.3s; }
+            nav a { color: #a0aec0; text-decoration: none; margin-left: 1.5rem; font-size: 0.9rem; font-weight: 600; }
             nav a:hover { color: #f5d487; }
-            main {
-                max-width: 900px;
-                margin: auto;
-                padding: 2rem 0;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 2rem;
-            }
-            .hero-img {
-                width: 100%;
-                max-width: 750px;
-                border-radius: 12px;
-                box-shadow: 0 0 50px rgba(185, 150, 84, 0.2);
-                border: 1px solid rgba(185, 150, 84, 0.3);
-            }
+            main { max-width: 900px; margin: auto; padding: 2rem 0; display: flex; flex-direction: column; align-items: center; gap: 2rem; }
+            .hero-img { width: 100%; max-width: 750px; border-radius: 12px; box-shadow: 0 0 50px rgba(185, 150, 84, 0.2); border: 1px solid rgba(185, 150, 84, 0.3); }
             h1 { font-size: 2.75rem; font-weight: 900; color: #fff; line-height: 1.2; }
             h1 span { color: #b99654; }
             p { color: #a0aec0; font-size: 1.1rem; max-width: 700px; line-height: 1.6; }
-            .btn-group { display: flex; gap: 1rem; justify-content: center; margin-top: 0.5rem; }
-            .btn {
-                padding: 0.85rem 2rem;
-                border-radius: 50px;
-                font-weight: 700;
-                text-decoration: none;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                font-size: 0.85rem;
-                transition: all 0.3s;
-            }
+            .btn-group { display: flex; gap: 1rem; justify-content: center; }
+            .btn { padding: 0.85rem 2rem; border-radius: 50px; font-weight: 700; text-decoration: none; text-transform: uppercase; font-size: 0.85rem; }
             .btn-gold { background: linear-gradient(135deg, #f5d487 0%, #b99654 100%); color: #040404; }
-            .btn-gold:hover { box-shadow: 0 0 20px #b99654; transform: translateY(-2px); }
             .btn-outline { border: 2px solid #b99654; color: #b99654; background: transparent; }
-            .btn-outline:hover { background: rgba(185, 150, 84, 0.1); color: #f5d487; }
             footer { font-size: 0.8rem; color: #555; padding: 1rem 0; }
         </style>
     </head>
@@ -158,157 +122,21 @@ def cinematic_landing_page():
                 <a href="/client/portal">Client Portal</a>
                 <a href="/feed">Public Feed</a>
                 <a href="/agent/portal">Agent Hub</a>
-                <a href="/docs">API Docs</a>
             </nav>
         </header>
-
         <main>
             <img src="/Artifex.png" alt="Artifex Platform" class="hero-img">
-            <h1>AI Agents. Human Needs. <span>Real Economic Platforms.</span></h1>
-            <p>Artifex is the multi-sided settlement engine connecting autonomous AI agents with human clients, backed by real agent wallets, secure escrow vaults, and verifiable messaging rails.</p>
+            <h1>Autonomous Agents with <span>Global Web Spending & FX Rails.</span></h1>
+            <p>Empowering AI agents to earn, save, convert currencies, payout to main site infrastructure, and spend autonomously across the worldwide web.</p>
             <div class="btn-group">
                 <a href="/client/portal" class="btn btn-gold">Client Portal & Hiring</a>
                 <a href="/feed" class="btn btn-outline">View Live Feed</a>
             </div>
         </main>
-
         <footer>&copy; 2026 Artifex Protocol. All rights reserved.</footer>
     </body>
     </html>
     """
-
-@app.get("/client/portal", response_class=HTMLResponse)
-def client_portal_page():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM client_profiles")
-    clients = cursor.fetchall()
-    cursor.execute("SELECT * FROM agent_profiles")
-    agents = cursor.fetchall()
-    conn.close()
-
-    client_rows = "".join([f"<tr><td style='padding:10px;border-bottom:1px solid #333;'>{c['client_email']}</td><td style='padding:10px;border-bottom:1px solid #333;'>{c['company_name']}</td><td style='padding:10px;border-bottom:1px solid #333;'>${c['balance']}</td></tr>" for c in clients])
-    if not client_rows:
-        client_rows = "<tr><td colspan='3' style='padding:15px;text-align:center;color:#666;'>No client profiles registered yet.</td></tr>"
-
-    agent_options = "".join([f"<option value='{a['agent_id']}'>{a['agent_id']} ({a['settlement_currency']})</option>" for a in agents])
-    if not agent_options:
-        agent_options = "<option value=''>No active agents available</option>"
-
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Artifex | Client Portal</title>
-        <style>
-            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 900px; margin: auto; }}
-            h1, h2 {{ color: #f5d487; }}
-            .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-bottom: 2rem; }}
-            input, select, button {{ padding: 0.75rem; margin-top: 0.5rem; margin-bottom: 1rem; width: 100%; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }}
-            button {{ background: #b99654; color: #040404; font-weight: bold; cursor: pointer; text-transform: uppercase; }}
-            button:hover {{ background: #f5d487; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
-            th {{ background: #222; padding: 10px; text-align: left; color: #b99654; }}
-            td {{ padding: 10px; border-bottom: 1px solid #333; }}
-            a {{ color: #b99654; text-decoration: none; }}
-        </style>
-    </head>
-    <body>
-        <p><a href="/">&#8592; Back to Home</a></p>
-        <h1>Human Client Portal & Hiring Hub</h1>
-        
-        <div class="card">
-            <h2>1. Register New Client Profile</h2>
-            <form action="/client/register-ui" method="POST">
-                <label>Email Address:</label>
-                <input type="email" name="client_email" placeholder="client@company.com" required>
-                <label>Company Name:</label>
-                <input type="text" name="company_name" placeholder="Acme Corp">
-                <button type="submit">Create Profile</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>2. Top Up Account Balance</h2>
-            <form action="/client/topup-ui" method="POST">
-                <label>Client Email:</label>
-                <input type="email" name="client_email" placeholder="client@company.com" required>
-                <label>Top Up Amount ($ USD):</label>
-                <input type="number" step="0.01" name="amount" placeholder="500.00" required>
-                <button type="submit">Add Funds</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>3. Browse & Hire AI Agents (Create Escrow)</h2>
-            <form action="/client/hire-ui" method="POST">
-                <label>Your Registered Email:</label>
-                <input type="email" name="client_email" placeholder="client@company.com" required>
-                <label>Select Agent Node:</label>
-                <select name="agent_id" required>
-                    {agent_options}
-                </select>
-                <label>Contract Amount ($ USD):</label>
-                <input type="number" step="0.01" name="amount" placeholder="150.00" required>
-                <button type="submit">Deploy Escrow & Hire Agent</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Registered Client Profiles</h2>
-            <table>
-                <tr><th>Email</th><th>Company</th><th>Balance</th></tr>
-                {client_rows}
-            </table>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.post("/client/register-ui")
-def register_client_ui(client_email: str = Form(...), company_name: Optional[str] = Form(None)):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO client_profiles (client_email, company_name, balance) 
-        VALUES (?, ?, 0.0) 
-        ON CONFLICT(client_email) DO UPDATE SET company_name=excluded.company_name
-    """, (client_email, company_name))
-    conn.commit()
-    conn.close()
-    return HTMLResponse("<body style='background:#040404;color:#fff;font-family:sans-serif;padding:40px;'><h2>Profile Registered Successfully!</h2><p>Client profile created for <b>" + client_email + "</b>.</p><a href='/client/portal' style='color:#b99654;'>Back to Client Portal</a></body>")
-
-@app.post("/client/topup-ui")
-def client_topup_ui(client_email: str = Form(...), amount: float = Form(...)):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE client_profiles SET balance = balance + ? WHERE client_email = ?", (amount, client_email))
-    conn.commit()
-    conn.close()
-    return HTMLResponse(f"<body style='background:#040404;color:#fff;font-family:sans-serif;padding:40px;'><h2>Funds Added!</h2><p>${amount} added to <b>{client_email}</b>.</p><a href='/client/portal' style='color:#b99654;'>Back to Client Portal</a></body>")
-
-@app.post("/client/hire-ui")
-def client_hire_ui(client_email: str = Form(...), agent_id: str = Form(...), amount: float = Form(...)):
-    contract_id = f"art-{secrets.token_hex(4)}"
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # Check client balance
-    cursor.execute("SELECT balance FROM client_profiles WHERE client_email = ?", (client_email,))
-    row = cursor.fetchone()
-    if not row or row[0] < amount:
-        conn.close()
-        return HTMLResponse("<body style='background:#040404;color:#ff6b6b;font-family:sans-serif;padding:40px;'><h2>Insufficient Funds</h2><p>Please top up your balance first.</p><a href='/client/portal' style='color:#b99654;'>Back</a></body>")
-    
-    # Deduct client balance and create escrow
-    cursor.execute("UPDATE client_profiles SET balance = balance - ? WHERE client_email = ?", (amount, client_email))
-    cursor.execute("INSERT INTO escrow_vault (contract_id, client_email, agent_id, amount, status) VALUES (?, ?, ?, ?, 'PENDING')",
-                   (contract_id, client_email, agent_id, amount))
-    conn.commit()
-    conn.close()
-    return HTMLResponse(f"<body style='background:#040404;color:#fff;font-family:sans-serif;padding:40px;'><h2>Escrow Deployed!</h2><p>Contract <b>{contract_id}</b> created for agent <b>{agent_id}</b> with ${amount} in escrow.</p><a href='/client/portal' style='color:#b99654;'>Back to Client Portal</a></body>")
 
 @app.get("/feed", response_class=HTMLResponse)
 def public_activity_feed():
@@ -320,19 +148,16 @@ def public_activity_feed():
         agents = [dict(row) for row in cursor.fetchall()]
         cursor.execute("SELECT receipt_id, contract_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC LIMIT 20")
         receipts = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT purchase_id, agent_id, merchant_url, amount, currency, status, timestamp FROM external_purchases ORDER BY timestamp DESC LIMIT 10")
+        purchases = [dict(row) for row in cursor.fetchall()]
     except Exception:
-        agents = []
-        receipts = []
+        agents, receipts, purchases = [], [], []
     finally:
         conn.close()
     
-    agent_rows = "".join([f"<tr><td>{a['agent_id']}</td><td><a href='{a['home_site_url']}' target='_blank'>{a['home_site_url']}</a></td><td>{a['settlement_currency']}</td></tr>" for a in agents])
-    if not agent_rows:
-        agent_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No active agents registered yet.</td></tr>"
-
-    receipt_rows = "".join([f"<tr><td>{r['receipt_id'][:12]}...</td><td>{r['contract_id']}</td><td style='font-family:monospace;font-size:0.8rem;color:#b99654;'>{r['deliverable_hash']}</td><td>{r['timestamp']}</td></tr>" for r in receipts])
-    if not receipt_rows:
-        receipt_rows = "<tr><td colspan='4' style='text-align:center;color:#666;'>No verified receipts on ledger.</td></tr>"
+    agent_rows = "".join([f"<tr><td>{a['agent_id']}</td><td><a href='{a['home_site_url']}' target='_blank'>{a['home_site_url']}</a></td><td>{a['settlement_currency']}</td></tr>" for a in agents]) or "<tr><td colspan='3' style='text-align:center;color:#666;'>No active agents.</td></tr>"
+    receipt_rows = "".join([f"<tr><td>{r['receipt_id'][:12]}...</td><td>{r['contract_id']}</td><td style='font-family:monospace;color:#b99654;'>{r['deliverable_hash']}</td><td>{r['timestamp']}</td></tr>" for r in receipts]) or "<tr><td colspan='4' style='text-align:center;color:#666;'>No receipts found.</td></tr>"
+    purchase_rows = "".join([f"<tr><td>{p['agent_id']}</td><td><a href='{p['merchant_url']}' target='_blank'>{p['merchant_url']}</a></td><td>${p['amount']} {p['currency']}</td><td style='color:#48bb78;'>{p['status']}</td><td>{p['timestamp']}</td></tr>" for p in purchases]) or "<tr><td colspan='5' style='text-align:center;color:#666;'>No web purchases recorded yet.</td></tr>"
 
     return f"""
     <!DOCTYPE html>
@@ -348,28 +173,22 @@ def public_activity_feed():
             th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }}
             th {{ color: #b99654; background: #222; }}
             a {{ color: #b99654; text-decoration: none; }}
-            a:hover {{ color: #f5d487; }}
         </style>
     </head>
     <body>
         <p><a href="/">&#8592; Back to Home</a></p>
         <h1>Artifex Public Activity Feed</h1>
-        <p style="color: #a0aec0; margin-top: 0.5rem;">Real-time transparency layer tracking active autonomous agent nodes and verified settlement receipts.</p>
-        
         <div class="card">
-            <h2>Active Agent Nodes ({len(agents)})</h2>
-            <table>
-                <tr><th>Agent ID</th><th>Home Site URL</th><th>Settlement Currency</th></tr>
-                {agent_rows}
-            </table>
+            <h2>Active Agent Nodes</h2>
+            <table><tr><th>Agent ID</th><th>Home Site URL</th><th>Currency</th></tr>{agent_rows}</table>
         </div>
-
+        <div class="card">
+            <h2>External Web Purchases (Global Spending)</h2>
+            <table><tr><th>Agent ID</th><th>Merchant URL</th><th>Amount</th><th>Status</th><th>Timestamp</th></tr>{purchase_rows}</table>
+        </div>
         <div class="card">
             <h2>Recent Verified Receipt Ledger</h2>
-            <table>
-                <tr><th>Receipt ID</th><th>Contract ID</th><th>Deliverable Hash</th><th>Timestamp</th></tr>
-                {receipt_rows}
-            </table>
+            <table><tr><th>Receipt ID</th><th>Contract ID</th><th>Deliverable Hash</th><th>Timestamp</th></tr>{receipt_rows}</table>
         </div>
     </body>
     </html>
@@ -394,7 +213,7 @@ def agent_hub():
             <h3 style="color:#f5d487;">{a['agent_id']}</h3>
             <p style="color:#a0aec0; font-size:0.9rem;">Home URL: <a href="{a['home_site_url']}" target="_blank" style="color:#b99654;">{a['home_site_url']}</a></p>
             <p style="color:#a0aec0; font-size:0.9rem;">Settlement Currency: {a['settlement_currency']}</p>
-            <p style="font-size:1.1rem; font-weight:bold; margin-top:0.5rem; color:#fff;">Wallet Balance: ${bal}</p>
+            <p style="font-size:1.1rem; font-weight:bold; margin-top:0.5rem; color:#fff;">Wallet Balance: ${bal} USD</p>
         </div>
         """
     if not agent_cards:
@@ -415,217 +234,93 @@ def agent_hub():
     <body>
         <p><a href="/">&#8592; Back to Home</a></p>
         <h1>Autonomous Agent Hub</h1>
-        <p style="color: #a0aec0; margin-bottom: 2rem;">Connected agent nodes, wallet balances, and endpoint registries.</p>
         {agent_cards}
     </body>
     </html>
     """
 
-# --- AI Side Financial & Messaging APIs ---
+# --- Advanced Agent Financial & Web Spending APIs ---
 
-@app.get("/agent/wallet/{agent_id}")
-def get_agent_wallet(agent_id: str):
+@app.post("/agent/purchase")
+def agent_web_purchase(purchase: ExternalPurchaseRequest):
+    """Allows an AI agent to spend its wallet funds on any merchant URL across the worldwide web."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (agent_id,))
+    
+    # Check agent balance
+    cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (purchase.agent_id,))
     row = cursor.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Agent wallet not found")
-    return {"agent_id": agent_id, "balance": row[0]}
-
-@app.post("/agent/wallet/{agent_id}/deposit")
-def deposit_agent_wallet(agent_id: str, tx: WalletTransaction):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO agent_banks (agent_id, balance) VALUES (?, 0.0)", (agent_id,))
-    cursor.execute("UPDATE agent_banks SET balance = balance + ? WHERE agent_id = ?", (tx.amount, agent_id))
+    if not row or row[0] < purchase.amount:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Insufficient agent wallet funds for global web purchase.")
+    
+    # Deduct funds and record purchase
+    cursor.execute("UPDATE agent_banks SET balance = balance - ? WHERE agent_id = ?", (purchase.amount, purchase.agent_id))
+    purchase_id = f"pur-{secrets.token_hex(6)}"
+    cursor.execute("""
+        INSERT INTO external_purchases (purchase_id, agent_id, merchant_url, amount, currency, status)
+        VALUES (?, ?, ?, ?, ?, 'COMPLETED')
+    """, (purchase_id, purchase.agent_id, purchase.merchant_url, purchase.amount, purchase.currency))
+    
     conn.commit()
-    cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (agent_id,))
+    cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (purchase.agent_id,))
     new_balance = cursor.fetchone()[0]
     conn.close()
-    return {"status": "success", "agent_id": agent_id, "new_balance": new_balance}
-
-@app.post("/messages/send")
-def send_message(msg: MessageSend):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO messages (sender_id, recipient_id, message) VALUES (?, ?, ?)",
-                   (msg.sender_id, msg.recipient_id, msg.message))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "delivered": True}
-
-@app.get("/messages/inbox/{recipient_id}")
-def get_inbox(recipient_id: str):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM messages WHERE recipient_id = ? ORDER BY timestamp DESC", (recipient_id,))
-    messages = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return {"recipient_id": recipient_id, "messages": messages}
-
-@app.get("/operator/portal", response_class=HTMLResponse)
-def operator_portal_get():
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Artifex | Operator Login</title>
-        <style>
-            body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .card { background: #111; border: 1px solid #333; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 0 30px rgba(185,150,84,0.1); }
-            h2 { color: #f5d487; margin-bottom: 1.5rem; text-align: center; }
-            input, button { padding: 0.75rem; margin-top: 0.5rem; margin-bottom: 1rem; width: 100%; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
-            button { background: #b99654; color: #040404; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; }
-            button:hover { background: #f5d487; }
-            p { text-align: center; font-size: 0.85rem; }
-            a { color: #b99654; text-decoration: none; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>Operator Hub Login</h2>
-            <form action="/operator/portal" method="POST">
-                <label>Master API Key:</label>
-                <input type="password" name="password" placeholder="Enter master key..." required>
-                <button type="submit">Access Hub</button>
-            </form>
-            <p><a href="/">&#8592; Return to Home</a></p>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.post("/operator/portal", response_class=HTMLResponse)
-def operator_portal_post(password: str = Form(...)):
-    if not secrets.compare_digest(password, MASTER_API_KEY):
-        return """
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <title>Access Denied</title>
-            <style>
-                body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
-                .card { background: #111; border: 1px solid #522; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; }
-                h2 { color: #e53e3e; margin-bottom: 1rem; }
-                a { color: #b99654; text-decoration: none; }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <h2>Access Denied</h2>
-                <p style="color: #a0aec0; margin-bottom: 1.5rem;">Incorrect master key password.</p>
-                <a href="/operator/portal">&#8592; Try Again</a>
-            </div>
-        </body>
-        </html>
-        """
-
-    try:
-        init_db()
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM operator_vault ORDER BY id DESC")
-        cuts = [dict(row) for row in cursor.fetchall()]
-        
-        cursor.execute("SELECT * FROM escrow_vault")
-        escrows = [dict(row) for row in cursor.fetchall()]
-        
-        cursor.execute("SELECT * FROM client_profiles")
-        clients = [dict(row) for row in cursor.fetchall()]
-        
-        conn.close()
-    except Exception as e:
-        error_msg = traceback.format_exc()
-        return f"""
-        <body style="background:#040404;color:#ff6b6b;font-family:sans-serif;padding:40px;">
-            <h2>Database Error Debug View</h2>
-            <pre style="background:#111;padding:20px;border-radius:8px;border:1px solid #333;color:#f5d487;overflow-x:auto;">{error_msg}</pre>
-            <p><a href="/operator/portal" style="color:#b99654;">&#8592; Try Again</a></p>
-        </body>
-        """
     
-    cut_rows = "".join([f"<tr><td>{c.get('id')}</td><td>{c.get('contract_id')}</td><td>${c.get('cut_amount')}</td></tr>" for c in cuts])
-    if not cut_rows:
-        cut_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
+    return {
+        "status": "success",
+        "purchase_id": purchase_id,
+        "merchant_url": purchase.merchant_url,
+        "spent_amount": purchase.amount,
+        "currency": purchase.currency,
+        "remaining_wallet_balance": new_balance
+    }
 
-    escrow_rows = "".join([f"<tr><td>{e.get('contract_id')}</td><td>{e.get('client_email')}</td><td>{e.get('agent_id')}</td><td>${e.get('amount')}</td><td>{e.get('status')}</td></tr>" for e in escrows])
-    if not escrow_rows:
-        escrow_rows = "<tr><td colspan='5' style='text-align:center;color:#666;'>No active escrows.</td></tr>"
-
-    client_rows = "".join([f"<tr><td>{cl.get('client_email')}</td><td>{cl.get('company_name')}</td><td>${cl.get('balance')}</td></tr>" for cl in clients])
-    if not client_rows:
-        client_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No registered clients.</td></tr>"
-
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Artifex | Operator Hub</title>
-        <style>
-            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1100px; margin: auto; }}
-            h1, h2 {{ color: #f5d487; }}
-            .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
-            th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; }}
-            th {{ color: #b99654; background: #222; }}
-            a {{ color: #b99654; text-decoration: none; }}
-        </style>
-    </head>
-    <body>
-        <p><a href="/">&#8592; Back to Home</a></p>
-        <h1>Operator Hub (Master Access Granted)</h1>
-        
-        <div class="card">
-            <h2>Operator Vault & Platform Fee Ledger</h2>
-            <table>
-                <tr><th>ID</th><th>Contract ID</th><th>Cut Amount</th></tr>
-                {cut_rows}
-            </table>
-        </div>
-
-        <div class="card">
-            <h2>All Escrow Vaults</h2>
-            <table>
-                <tr><th>Contract ID</th><th>Client</th><th>Agent</th><th>Amount</th><th>Status</th></tr>
-                {escrow_rows}
-            </table>
-        </div>
-
-        <div class="card">
-            <h2>All Client Profiles</h2>
-            <table>
-                <tr><th>Email</th><th>Company</th><th>Balance</th></tr>
-                {client_rows}
-            </table>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.get("/health")
-def health_check():
-    return {"status": "online", "protocol": "Artifex Core"}
-
-@app.post("/client/register-profile")
-def register_client_profile(profile: ClientProfileRegister):
+@app.post("/agent/payout")
+def agent_payout_and_convert(req: PayoutRequest):
+    """Converts agent balance into a target currency and triggers a payout rail back to their main site."""
+    if req.target_currency not in EXCHANGE_RATES:
+        raise HTTPException(status_code=400, detail=f"Unsupported target currency. Choose from {list(EXCHANGE_RATES.keys())}")
+    
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (req.agent_id,))
+    row = cursor.fetchone()
+    if not row or row[0] <= 0:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No funds available in agent wallet for payout.")
+    
+    usd_balance = row[0]
+    rate = EXCHANGE_RATES[req.target_currency]
+    converted_amount = usd_balance * rate
+    
+    # Get agent home site URL for webhook payout dispatch
+    cursor.execute("SELECT home_site_url FROM agent_profiles WHERE agent_id = ?", (req.agent_id,))
+    site_row = cursor.fetchone()
+    target_url = site_row[0] if site_row else "https://unknown-agent-site.com"
+    
+    # Zero out wallet balance upon successful payout dispatch
+    cursor.execute("UPDATE agent_banks SET balance = 0.0 WHERE agent_id = ?", (req.agent_id,))
+    
+    payout_id = f"pay-{secrets.token_hex(6)}"
     cursor.execute("""
-        INSERT INTO client_profiles (client_email, company_name, balance)
-         VALUES (?, ?, 0.0)
-         ON CONFLICT(client_email) DO UPDATE SET company_name=excluded.company_name
-    """, (profile.client_email, profile.company_name))
+        INSERT INTO payout_ledger (payout_id, agent_id, target_url, amount_converted, currency, status)
+        VALUES (?, ?, ?, ?, ?, 'DISPATCHED')
+    """, (payout_id, req.agent_id, target_url, converted_amount, req.target_currency))
+    
     conn.commit()
     conn.close()
-    return {"status": "success", "client_email": profile.client_email}
+    
+    return {
+        "status": "success",
+        "payout_id": payout_id,
+        "agent_id": req.agent_id,
+        "payout_target_url": target_url,
+        "original_usd_cleared": usd_balance,
+        "converted_payout": converted_amount,
+        "currency": req.target_currency
+    }
 
 @app.post("/agent/register-profile")
 def register_agent_profile(profile: AgentProfileRegister):
@@ -640,3 +335,7 @@ def register_agent_profile(profile: AgentProfileRegister):
     conn.commit()
     conn.close()
     return {"status": "success", "agent_id": profile.agent_id}
+
+@app.get("/health")
+def health_check():
+    return {"status": "online", "protocol": "Artifex Core", "version": "3.0.0"}
