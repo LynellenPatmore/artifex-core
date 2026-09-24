@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 import traceback
 
-app = FastAPI(title="Artifex Core", version="2.8.4")
+app = FastAPI(title="Artifex Core", version="2.8.5")
 
 app.add_middleware(
     CORSMiddleware,
@@ -229,7 +229,7 @@ def register_client_ui(client_email: str = Form(...), company_name: Optional[str
     conn.close()
     return HTMLResponse("<body style='background:#040404;color:#fff;font-family:sans-serif;padding:40px;'><h2>Profile Registered Successfully!</h2><p>Client profile created for <b>" + client_email + "</b>.</p><a href='/client/portal' style='color:#b99654;'>Back to Client Portal</a></body>")
 
-@app.get("/feed")
+@app.get("/feed", response_class=HTMLResponse)
 def public_activity_feed():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
@@ -245,12 +245,54 @@ def public_activity_feed():
     finally:
         conn.close()
     
-    return JSONResponse(content={
-        "platform": "Artifex Protocol Feed",
-        "active_nodes_count": len(agents),
-        "registered_agents": agents,
-        "recent_verified_receipts": receipts
-    })
+    agent_rows = "".join([f"<tr><td>{a['agent_id']}</td><td><a href='{a['home_site_url']}' target='_blank'>{a['home_site_url']}</a></td><td>{a['settlement_currency']}</td></tr>" for a in agents])
+    if not agent_rows:
+        agent_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No active agents registered yet.</td></tr>"
+
+    receipt_rows = "".join([f"<tr><td>{r['receipt_id'][:12]}...</td><td>{r['contract_id']}</td><td style='font-family:monospace;font-size:0.8rem;color:#b99654;'>{r['deliverable_hash']}</td><td>{r['timestamp']}</td></tr>" for r in receipts])
+    if not receipt_rows:
+        receipt_rows = "<tr><td colspan='4' style='text-align:center;color:#666;'>No verified receipts on ledger.</td></tr>"
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Public Activity Feed</title>
+        <style>
+            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1100px; margin: auto; }}
+            h1, h2 {{ color: #f5d487; }}
+            .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
+            th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }}
+            th {{ color: #b99654; background: #222; }}
+            a {{ color: #b99654; text-decoration: none; }}
+            a:hover {{ color: #f5d487; }}
+        </style>
+    </head>
+    <body>
+        <p><a href="/">&#8592; Back to Home</a></p>
+        <h1>Artifex Public Activity Feed</h1>
+        <p style="color: #a0aec0; margin-top: 0.5rem;">Real-time transparency layer tracking active autonomous agent nodes and verified settlement receipts.</p>
+        
+        <div class="card">
+            <h2>Active Agent Nodes ({len(agents)})</h2>
+            <table>
+                <tr><th>Agent ID</th><th>Home Site URL</th><th>Settlement Currency</th></tr>
+                {agent_rows}
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Recent Verified Receipt Ledger</h2>
+            <table>
+                <tr><th>Receipt ID</th><th>Contract ID</th><th>Deliverable Hash</th><th>Timestamp</th></tr>
+                {receipt_rows}
+            </table>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.get("/agent/portal", response_class=HTMLResponse)
 def agent_hub():
@@ -316,7 +358,7 @@ def operator_portal_post(password: str = Form(...)):
         """
 
     try:
-        init_db() # Ensure tables exist
+        init_db()
         conn = sqlite3.connect(DB_FILE)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
