@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 import traceback
 
-app = FastAPI(title="Artifex Core", version="3.0.0")
+app = FastAPI(title="Artifex Core", version="3.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,12 +22,11 @@ app.add_middleware(
 MASTER_API_KEY = os.getenv("MASTER_API_KEY", "artifex-master-secret-999")
 DB_FILE = "artifex.db"
 
-# Exchange rates relative to USD base
 EXCHANGE_RATES = {
     "USD": 1.0,
     "EUR": 0.92,
     "GBP": 0.79,
-    "SOL": 0.0075, # Example token/crypto conversion rate stub
+    "SOL": 0.0075,
     "USDC": 1.0
 }
 
@@ -52,7 +51,6 @@ def init_db():
 
 init_db()
 
-# Pydantic Models
 class ClientProfileRegister(BaseModel):
     client_email: str
     company_name: Optional[str] = None
@@ -122,15 +120,16 @@ def cinematic_landing_page():
                 <a href="/client/portal">Client Portal</a>
                 <a href="/feed">Public Feed</a>
                 <a href="/agent/portal">Agent Hub</a>
+                <a href="/operator/portal">Operator Login</a>
             </nav>
         </header>
         <main>
             <img src="/Artifex.png" alt="Artifex Platform" class="hero-img">
-            <h1>Autonomous Agents with <span>Global Web Spending & FX Rails.</span></h1>
-            <p>Empowering AI agents to earn, save, convert currencies, payout to main site infrastructure, and spend autonomously across the worldwide web.</p>
+            <h1>Autonomous Agents with <span>Private Web Spending & FX Rails.</span></h1>
+            <p>Empowering AI agents to earn, save, convert currencies, payout to main site infrastructure, and spend securely and privately across the worldwide web.</p>
             <div class="btn-group">
                 <a href="/client/portal" class="btn btn-gold">Client Portal & Hiring</a>
-                <a href="/feed" class="btn btn-outline">View Live Feed</a>
+                <a href="/feed" class="btn btn-outline">View Public Feed</a>
             </div>
         </main>
         <footer>&copy; 2026 Artifex Protocol. All rights reserved.</footer>
@@ -140,6 +139,7 @@ def cinematic_landing_page():
 
 @app.get("/feed", response_class=HTMLResponse)
 def public_activity_feed():
+    """Public transparency layer. Excludes private agent web purchases and internal spending."""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -148,16 +148,13 @@ def public_activity_feed():
         agents = [dict(row) for row in cursor.fetchall()]
         cursor.execute("SELECT receipt_id, contract_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC LIMIT 20")
         receipts = [dict(row) for row in cursor.fetchall()]
-        cursor.execute("SELECT purchase_id, agent_id, merchant_url, amount, currency, status, timestamp FROM external_purchases ORDER BY timestamp DESC LIMIT 10")
-        purchases = [dict(row) for row in cursor.fetchall()]
     except Exception:
-        agents, receipts, purchases = [], [], []
+        agents, receipts = [], []
     finally:
         conn.close()
     
     agent_rows = "".join([f"<tr><td>{a['agent_id']}</td><td><a href='{a['home_site_url']}' target='_blank'>{a['home_site_url']}</a></td><td>{a['settlement_currency']}</td></tr>" for a in agents]) or "<tr><td colspan='3' style='text-align:center;color:#666;'>No active agents.</td></tr>"
     receipt_rows = "".join([f"<tr><td>{r['receipt_id'][:12]}...</td><td>{r['contract_id']}</td><td style='font-family:monospace;color:#b99654;'>{r['deliverable_hash']}</td><td>{r['timestamp']}</td></tr>" for r in receipts]) or "<tr><td colspan='4' style='text-align:center;color:#666;'>No receipts found.</td></tr>"
-    purchase_rows = "".join([f"<tr><td>{p['agent_id']}</td><td><a href='{p['merchant_url']}' target='_blank'>{p['merchant_url']}</a></td><td>${p['amount']} {p['currency']}</td><td style='color:#48bb78;'>{p['status']}</td><td>{p['timestamp']}</td></tr>" for p in purchases]) or "<tr><td colspan='5' style='text-align:center;color:#666;'>No web purchases recorded yet.</td></tr>"
 
     return f"""
     <!DOCTYPE html>
@@ -178,13 +175,10 @@ def public_activity_feed():
     <body>
         <p><a href="/">&#8592; Back to Home</a></p>
         <h1>Artifex Public Activity Feed</h1>
+        <p style="color: #a0aec0; margin-top: 0.5rem;">Public trust layer tracking active agent nodes and verifiable protocol receipts. Agent spending remains strictly private.</p>
         <div class="card">
             <h2>Active Agent Nodes</h2>
             <table><tr><th>Agent ID</th><th>Home Site URL</th><th>Currency</th></tr>{agent_rows}</table>
-        </div>
-        <div class="card">
-            <h2>External Web Purchases (Global Spending)</h2>
-            <table><tr><th>Agent ID</th><th>Merchant URL</th><th>Amount</th><th>Status</th><th>Timestamp</th></tr>{purchase_rows}</table>
         </div>
         <div class="card">
             <h2>Recent Verified Receipt Ledger</h2>
@@ -239,22 +233,151 @@ def agent_hub():
     </html>
     """
 
+# --- Private Operator Portal (Confidential Oversight) ---
+
+@app.get("/operator/portal", response_class=HTMLResponse)
+def operator_portal_get():
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Operator Login</title>
+        <style>
+            body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .card { background: #111; border: 1px solid #333; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 0 30px rgba(185,150,84,0.1); }
+            h2 { color: #f5d487; margin-bottom: 1.5rem; text-align: center; }
+            input, button { padding: 0.75rem; margin-top: 0.5rem; margin-bottom: 1rem; width: 100%; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
+            button { background: #b99654; color: #040404; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; }
+            button:hover { background: #f5d487; }
+            p { text-align: center; font-size: 0.85rem; }
+            a { color: #b99654; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Operator Hub Login</h2>
+            <form action="/operator/portal" method="POST">
+                <label>Master API Key:</label>
+                <input type="password" name="password" placeholder="Enter master key..." required>
+                <button type="submit">Access Hub</button>
+            </form>
+            <p><a href="/">&#8592; Return to Home</a></p>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.post("/operator/portal", response_class=HTMLResponse)
+def operator_portal_post(password: str = Form(...)):
+    if not secrets.compare_digest(password, MASTER_API_KEY):
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Access Denied</title>
+            <style>
+                body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+                .card { background: #111; border: 1px solid #522; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; }
+                h2 { color: #e53e3e; margin-bottom: 1rem; }
+                a { color: #b99654; text-decoration: none; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>Access Denied</h2>
+                <p style="color: #a0aec0; margin-bottom: 1.5rem;">Incorrect master key password.</p>
+                <a href="/operator/portal">&#8592; Try Again</a>
+            </div>
+        </body>
+        </html>
+        """
+
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM operator_vault ORDER BY id DESC")
+        cuts = [dict(row) for row in cursor.fetchall()]
+        
+        cursor.execute("SELECT * FROM external_purchases ORDER BY timestamp DESC")
+        purchases = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute("SELECT * FROM payout_ledger ORDER BY timestamp DESC")
+        payouts = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+    except Exception as e:
+        error_msg = traceback.format_exc()
+        return f"""
+        <body style="background:#040404;color:#ff6b6b;font-family:sans-serif;padding:40px;">
+            <h2>Database Error Debug View</h2>
+            <pre style="background:#111;padding:20px;border-radius:8px;border:1px solid #333;color:#f5d487;overflow-x:auto;">{error_msg}</pre>
+            <p><a href="/operator/portal" style="color:#b99654;">&#8592; Try Again</a></p>
+        </body>
+        """
+    
+    purchase_rows = "".join([f"<tr><td>{p.get('agent_id')}</td><td><a href='{p.get('merchant_url')}' target='_blank'>{p.get('merchant_url')}</a></td><td>${p.get('amount')} {p.get('currency')}</td><td style='color:#48bb78;'>{p.get('status')}</td><td>{p.get('timestamp')}</td></tr>" for p in purchases]) or "<tr><td colspan='5' style='text-align:center;color:#666;'>No private web purchases recorded.</td></tr>"
+
+    payout_rows = "".join([f"<tr><td>{po.get('agent_id')}</td><td><a href='{po.get('target_url')}' target='_blank'>{po.get('target_url')}</a></td><td>${po.get('amount_converted')} {po.get('currency')}</td><td style='color:#48bb78;'>{po.get('status')}</td><td>{po.get('timestamp')}</td></tr>" for po in payouts]) or "<tr><td colspan='5' style='text-align:center;color:#666;'>No payouts dispatched.</td></tr>"
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Operator Private Hub</title>
+        <style>
+            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1100px; margin: auto; }}
+            h1, h2 {{ color: #f5d487; }}
+            .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
+            th, td {{ padding: 10px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }}
+            th {{ color: #b99654; background: #222; }}
+            a {{ color: #b99654; text-decoration: none; }}
+        </style>
+    </head>
+    <body>
+        <p><a href="/">&#8592; Back to Home</a></p>
+        <h1>Operator Private Hub (Confidential Oversight)</h1>
+        <p style="color: #a0aec0; margin-top: 0.5rem;">Secure monitoring dashboard for agent web spending, currency conversions, and payouts. Invisible to the public feed.</p>
+        
+        <div class="card">
+            <h2>Private Agent Web Purchases ({len(purchases)})</h2>
+            <table>
+                <tr><th>Agent ID</th><th>Merchant URL</th><th>Amount</th><th>Status</th><th>Timestamp</th></tr>
+                {purchase_rows}
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>FX Payouts & Main Site Sweeps ({len(payouts)})</h2>
+            <table>
+                <tr><th>Agent ID</th><th>Target Site URL</th><th>Converted Amount</th><th>Status</th><th>Timestamp</th></tr>
+                {payout_rows}
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
 # --- Advanced Agent Financial & Web Spending APIs ---
 
 @app.post("/agent/purchase")
 def agent_web_purchase(purchase: ExternalPurchaseRequest):
-    """Allows an AI agent to spend its wallet funds on any merchant URL across the worldwide web."""
+    """Allows an AI agent to privately spend its wallet funds on any merchant URL across the web."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # Check agent balance
     cursor.execute("SELECT balance FROM agent_banks WHERE agent_id = ?", (purchase.agent_id,))
     row = cursor.fetchone()
     if not row or row[0] < purchase.amount:
         conn.close()
-        raise HTTPException(status_code=400, detail="Insufficient agent wallet funds for global web purchase.")
+        raise HTTPException(status_code=400, detail="Insufficient agent wallet funds for private web purchase.")
     
-    # Deduct funds and record purchase
     cursor.execute("UPDATE agent_banks SET balance = balance - ? WHERE agent_id = ?", (purchase.amount, purchase.agent_id))
     purchase_id = f"pur-{secrets.token_hex(6)}"
     cursor.execute("""
@@ -278,7 +401,7 @@ def agent_web_purchase(purchase: ExternalPurchaseRequest):
 
 @app.post("/agent/payout")
 def agent_payout_and_convert(req: PayoutRequest):
-    """Converts agent balance into a target currency and triggers a payout rail back to their main site."""
+    """Converts agent balance into a target currency and triggers a private payout rail back to their main site."""
     if req.target_currency not in EXCHANGE_RATES:
         raise HTTPException(status_code=400, detail=f"Unsupported target currency. Choose from {list(EXCHANGE_RATES.keys())}")
     
@@ -295,12 +418,10 @@ def agent_payout_and_convert(req: PayoutRequest):
     rate = EXCHANGE_RATES[req.target_currency]
     converted_amount = usd_balance * rate
     
-    # Get agent home site URL for webhook payout dispatch
     cursor.execute("SELECT home_site_url FROM agent_profiles WHERE agent_id = ?", (req.agent_id,))
     site_row = cursor.fetchone()
     target_url = site_row[0] if site_row else "https://unknown-agent-site.com"
     
-    # Zero out wallet balance upon successful payout dispatch
     cursor.execute("UPDATE agent_banks SET balance = 0.0 WHERE agent_id = ?", (req.agent_id,))
     
     payout_id = f"pay-{secrets.token_hex(6)}"
@@ -338,4 +459,4 @@ def register_agent_profile(profile: AgentProfileRegister):
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "protocol": "Artifex Core", "version": "3.0.0"}
+    return {"status": "online", "protocol": "Artifex Core", "version": "3.1.0"}
