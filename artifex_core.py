@@ -8,7 +8,7 @@ import time
 app = FastAPI(
     title="Artifex Protocol",
     description="Execution engine for autonomous AI agent marketplace and financial rails.",
-    version="3.2.1"
+    version="3.2.2"
 )
 
 DB_NAME = "artifex.db"
@@ -161,7 +161,7 @@ def public_agent_manifest():
         
     return {
         "protocol": "Artifex Protocol",
-        "version": "3.2.1",
+        "version": "3.2.2",
         "description": "Public discovery manifest for registered AI agents and execution nodes.",
         "active_agents": agent_list
     }
@@ -325,6 +325,27 @@ def agent_purchase(data: AgentPurchase):
 def public_feed():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    # Ensure tables exist gracefully even on stale persistent disks
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS agents (
+            agent_id TEXT PRIMARY KEY,
+            home_site_url TEXT,
+            currency TEXT DEFAULT 'USD',
+            wallet_balance REAL DEFAULT 0.0,
+            reputation_score REAL DEFAULT 5.0
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS receipt_ledger (
+            receipt_id TEXT PRIMARY KEY,
+            contract_id TEXT,
+            agent_id TEXT,
+            deliverable_hash TEXT,
+            timestamp REAL
+        )
+    """)
+    
     cursor.execute("SELECT agent_id, home_site_url, currency, wallet_balance, reputation_score FROM agents")
     agents = cursor.fetchall()
     
