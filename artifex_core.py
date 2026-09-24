@@ -78,6 +78,12 @@ class PayoutRequest(BaseModel):
     agent_id: str
     target_currency: str
 
+class DeliverableSubmission(BaseModel):
+    contract_id: str
+    agent_id: str
+    deliverable_hash: str
+    audit_signature: str
+    
 @app.get("/Artifex.png")
 def get_artifex_image():
     if os.path.exists("Artifex.png"):
@@ -443,6 +449,34 @@ def agent_payout_and_convert(req: PayoutRequest):
         "currency": req.target_currency
     }
 
+@app.post("/agent/deliverable/submit")
+def submit_deliverable(sub: DeliverableSubmission):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Verify contract is locked
+    cursor.execute("SELECT amount, client_email FROM escrow_vault WHERE contract_id = ? AND status = 'LOCKED'", (sub.contract_id,))
+    escrow = cursor.fetchone()
+    if not escrow:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Invalid contract ID or escrow is not in LOCKED state.")
+        
+    receipt_id = f"rcpt-{secrets.token_hex(6)}"
+    cursor.execute("""
+        INSERT INTO receipt_ledger (receipt_id, contract_id, deliverable_hash, audit_signature)
+        VALUES (?, ?, ?, ?)
+    """, (receipt_id, sub.contract_id, sub.deliverable_hash, sub.audit_signature))
+    
+    conn.commit()
+    conn.close()
+    return {
+        "status": "success",
+        "receipt_id": receipt_id,
+        "contract_id": sub.contract_id,
+        "deliverable_hash": sub.deliverable_hash,
+        "message": "Deliverable recorded and published to verification ledger."
+    }
+
 @app.post("/agent/register-profile")
 def register_agent_profile(profile: AgentProfileRegister):
     conn = sqlite3.connect(DB_FILE)
@@ -514,10 +548,98 @@ def register_client_post(client_email: str = Form(...), company_name: Optional[s
     return HTMLResponse(content="<body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'><h2>Client Registered Successfully!</h2><a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a></body>")
 
 @app.post("/client/escrow/create")
-def create_escrow_post(contract_id: str = Form(...), client_email: str = Form(...), agent_id: str = Form(...), amount: float = Form(...)):
+def create_escrow_post(
+    contract_id: str = Form(...), 
+    client_email: str = Form(...), 
+    agent_id: str = Form(...), 
+    amount: float = Form(...)
+):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Escrow amount must be greater than zero.")
+        
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO escrow_vault (contract_id, client_email, agent_id, amount, status) VALUES (?, ?, ?, ?, 'LOCKED')", (contract_id, client_email, agent_id, amount))
+    
+    # Validate client and agent existence
+    cursor.execute("SELECT client_email FROM client_profiles WHERE client_email = ?", (client_email,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Client email not registered. Please register first.")
+        
+    cursor.execute("SELECT agent_id FROM agent_profiles WHERE agent_id = ?", (agent_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Target agent ID does not exist.")
+
+    # Insert contract in PENDING state awaiting payment
+    cursor.execute("""
+        INSERT OR REPLACE INTO escrow_vault (contract_id, client_email, agent_id, amount, status) 
+        VALUES (?, ?, ?, ?, 'PENDING_PAYMENT')
+    """, (contract_id, client_email, agent_id, amount))
     conn.commit()
     conn.close()
-    return HTMLResponse(content="<body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'><h2>Escrow Contract Created!</h2><a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a></body>")
+
+    # In production, integrate Stripe Checkout API here. For now, simulate secure payment redirect link:
+    return HTMLResponse(content=f"""
+    <body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'>
+        <h2>Escrow Initialized ({contract_id})</h2>
+        <p style='color:#a0aec0;'>Amount: ${amount} USD | Target Agent: {agent_id}</p>
+        <div style='background:#111;border:1px solid #333;padding:2rem;border-radius:8px;max-width:500px;margin-top:1.5rem;'>
+            <p style='margin-bottom:1rem;'>Proceed to secure card checkout via Stripe:</p>
+            <a href='/client/escrow/simulated-pay?contract_id={contract_id}' style='background:#b99654;color:#040404;padding:0.75rem 1.5rem;font-weight:bold;text-decoration:none;border-radius:6px;display:inline-block;'>Pay ${amount} with Card (Stripe)</a>
+        </div>
+        <p style='margin-top:2rem;'><a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a></p>
+    </body>
+    """)
+
+@app.get("/client/escrow/simulated-pay")
+def simulate_stripe_payment(contract_id: str):
+    """Simulates successful webhook return from Stripe, locking funds and making them active."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE escrow_vault SET status = 'LOCKED' WHERE contract_id = ?", (contract_id,))
+    conn.commit()
+    conn.close()
+    return HTMLResponse(content=f"""
+    <body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'>
+        <h2 style='color:#48bb78;'>Payment Successful! Funds Secured in Escrow.</h2>
+        <p>Contract <b>{contract_id}</b> is now fully funded and locked.</p>
+        <a href='/client/portal' style='color:#b99654;'>&#8592; Return to Client Portal</a>
+    </body>
+    """)
+
+@app.post("/client/contract/release")
+def release_escrow_funds(contract_id: str = Form(...)):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT agent_id, amount, status FROM escrow_vault WHERE contract_id = ?", (contract_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Contract not found.")
+        
+    agent_id, amount, status = row
+    if status != 'LOCKED':
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Cannot release funds. Current contract status is {status}.")
+        
+    # Update contract status
+    cursor.execute("UPDATE escrow_vault SET status = 'RELEASED' WHERE contract_id = ?", (contract_id,))
+    
+    # Credit agent bank balance
+    cursor.execute("INSERT INTO agent_banks (agent_id, balance) VALUES (?, ?) ON CONFLICT(agent_id) DO UPDATE SET balance = balance + ?", (agent_id, amount, amount))
+    
+    # Log operator cut / vault tracking if needed
+    cursor.execute("INSERT INTO operator_vault (contract_id, cut_amount) VALUES (?, ?)", (contract_id, amount * 0.05)) # 5% protocol fee example
+    
+    conn.commit()
+    conn.close()
+    
+    return HTMLResponse(content=f"""
+    <body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'>
+        <h2 style='color:#48bb78;'>Funds Released Successfully!</h2>
+        <p>Contract <b>{contract_id}</b> funds (${amount} USD) transferred to agent <b>{agent_id}</b> wallet.</p>
+        <a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a>
+    </body>
+    """)
