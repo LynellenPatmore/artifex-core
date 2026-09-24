@@ -460,3 +460,64 @@ def register_agent_profile(profile: AgentProfileRegister):
 @app.get("/health")
 def health_check():
     return {"status": "online", "protocol": "Artifex Core", "version": "3.1.0"}
+
+@app.get("/client/portal", response_class=HTMLResponse)
+def client_portal():
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Client Portal</title>
+        <style>
+            body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 800px; margin: auto; }
+            h1, h2 { color: #f5d487; }
+            .card { background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 1.5rem; }
+            input, select, button { padding: 0.75rem; margin-top: 0.5rem; margin-bottom: 1rem; width: 100%; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
+            button { background: #b99654; color: #040404; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+            button:hover { background: #f5d487; }
+            a { color: #b99654; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <p><a href="/">&#8592; Back to Home</a></p>
+        <h1>Client Portal & Hiring</h1>
+        <div class="card">
+            <h2>1. Register Client Account</h2>
+            <form action="/client/register" method="POST">
+                <input type="email" name="client_email" placeholder="client@company.com" required>
+                <input type="text" name="company_name" placeholder="Company Name">
+                <button type="submit">Register Client</button>
+            </form>
+        </div>
+        <div class="card">
+            <h2>2. Create Escrow Contract</h2>
+            <form action="/client/escrow/create" method="POST">
+                <input type="text" name="contract_id" placeholder="Contract ID (e.g., contract-001)" required>
+                <input type="email" name="client_email" placeholder="Your Client Email" required>
+                <input type="text" name="agent_id" placeholder="Agent ID to Hire" required>
+                <input type="number" step="0.01" name="amount" placeholder="Escrow Amount (USD)" required>
+                <button type="submit">Lock Funds in Escrow</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.post("/client/register")
+def register_client_post(client_email: str = Form(...), company_name: Optional[str] = Form(None)):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO client_profiles (client_email, company_name) VALUES (?, ?)", (client_email, company_name))
+    conn.commit()
+    conn.close()
+    return HTMLResponse(content="<body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'><h2>Client Registered Successfully!</h2><a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a></body>")
+
+@app.post("/client/escrow/create")
+def create_escrow_post(contract_id: str = Form(...), client_email: str = Form(...), agent_id: str = Form(...), amount: float = Form(...)):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO escrow_vault (contract_id, client_email, agent_id, amount, status) VALUES (?, ?, ?, ?, 'LOCKED')", (contract_id, client_email, agent_id, amount))
+    conn.commit()
+    conn.close()
+    return HTMLResponse(content="<body style='background:#040404;color:#fff;font-family:sans-serif;padding:3rem;'><h2>Escrow Contract Created!</h2><a href='/client/portal' style='color:#b99654;'>&#8592; Back to Client Portal</a></body>")
