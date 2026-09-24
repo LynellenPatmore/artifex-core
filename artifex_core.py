@@ -4,12 +4,11 @@ import requests
 from fastapi import FastAPI, HTTPException, Request, Form, Depends, status
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Artifex Core", version="2.8.2")
+app = FastAPI(title="Artifex Core", version="2.8.3")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,17 +20,6 @@ app.add_middleware(
 
 MASTER_API_KEY = os.getenv("MASTER_API_KEY", "artifex-master-secret-999")
 DB_FILE = "artifex.db"
-security = HTTPBasic()
-
-def verify_operator(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_password = secrets.compare_digest(credentials.password, MASTER_API_KEY)
-    if not correct_password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect operator credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -268,7 +256,64 @@ def agent_hub():
     return "<body style='background:#040404;color:#f5d487;font-family:sans-serif;padding:40px;'><h1>Artifex Agent Hub</h1><p>Autonomous agent nodes connected.</p><p><a href='/' style='color:#fff;'>Home</a></p></body>"
 
 @app.get("/operator/portal", response_class=HTMLResponse)
-def operator_portal(operator: str = Depends(verify_operator)):
+def operator_portal_get():
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Artifex | Operator Login</title>
+        <style>
+            body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .card { background: #111; border: 1px solid #333; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 0 30px rgba(185,150,84,0.1); }
+            h2 { color: #f5d487; margin-bottom: 1.5rem; text-align: center; }
+            input, button { padding: 0.75rem; margin-top: 0.5rem; margin-bottom: 1rem; width: 100%; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
+            button { background: #b99654; color: #040404; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; }
+            button:hover { background: #f5d487; }
+            p { text-align: center; font-size: 0.85rem; }
+            a { color: #b99654; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Operator Hub Login</h2>
+            <form action="/operator/portal" method="POST">
+                <label>Master API Key:</label>
+                <input type="password" name="password" placeholder="Enter master key..." required>
+                <button type="submit">Access Hub</button>
+            </form>
+            <p><a href="/">&#8592; Return to Home</a></p>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.post("/operator/portal", response_class=HTMLResponse)
+def operator_portal_post(password: str = Form(...)):
+    if not secrets.compare_digest(password, MASTER_API_KEY):
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Access Denied</title>
+            <style>
+                body { background: #040404; color: #fff; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+                .card { background: #111; border: 1px solid #522; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; }
+                h2 { color: #e53e3e; margin-bottom: 1rem; }
+                a { color: #b99654; text-decoration: none; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>Access Denied</h2>
+                <p style="color: #a0aec0; margin-bottom: 1.5rem;">Incorrect master key password.</p>
+                <a href="/operator/portal">&#8592; Try Again</a>
+            </div>
+        </body>
+        </html>
+        """
+
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -290,6 +335,14 @@ def operator_portal(operator: str = Depends(verify_operator)):
     if not cut_rows:
         cut_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
 
+    escrow_rows = "".join([f"<tr><td>{e['contract_id']}</td><td>{e['client_email']}</td><td>{e['agent_id']}</td><td>${e['amount']}</td><td>{e['status']}</td></tr>" for e in escrows])
+    if not escrow_rows:
+        escrow_rows = "<tr><td colspan='5' style='text-align:center;color:#666;'>No active escrows.</td></tr>"
+
+    client_rows = "".join([f"<tr><td>{cl['client_email']}</td><td>{cl['company_name']}</td><td>${cl['balance']}</td></tr>" for cl in clients])
+    if not client_rows:
+        client_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No registered clients.</td></tr>"
+
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -297,7 +350,7 @@ def operator_portal(operator: str = Depends(verify_operator)):
         <meta charset="UTF-8">
         <title>Artifex | Operator Hub</title>
         <style>
-            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1000px; margin: auto; }}
+            body {{ background: #040404; color: #fff; font-family: 'Inter', sans-serif; padding: 3rem; max-width: 1100px; margin: auto; }}
             h1, h2 {{ color: #f5d487; }}
             .card {{ background: #111; border: 1px solid #333; padding: 2rem; border-radius: 12px; margin-top: 2rem; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; }}
@@ -308,13 +361,29 @@ def operator_portal(operator: str = Depends(verify_operator)):
     </head>
     <body>
         <p><a href="/">&#8592; Back to Home</a></p>
-        <h1>Operator Hub (Restricted Access)</h1>
+        <h1>Operator Hub (Master Access Granted)</h1>
         
         <div class="card">
             <h2>Operator Vault & Platform Fee Ledger</h2>
             <table>
                 <tr><th>ID</th><th>Contract ID</th><th>Cut Amount</th></tr>
                 {cut_rows}
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>All Escrow Vaults</h2>
+            <table>
+                <tr><th>Contract ID</th><th>Client</th><th>Agent</th><th>Amount</th><th>Status</th></tr>
+                {escrow_rows}
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>All Client Profiles</h2>
+            <table>
+                <tr><th>Email</th><th>Company</th><th>Balance</th></tr>
+                {client_rows}
             </table>
         </div>
     </body>
