@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import secrets
 from pydantic import BaseModel
 from typing import Optional
+import traceback
 
-app = FastAPI(title="Artifex Core", version="2.8.3")
+app = FastAPI(title="Artifex Core", version="2.8.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -314,32 +315,41 @@ def operator_portal_post(password: str = Form(...)):
         </html>
         """
 
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
     try:
+        init_db() # Ensure tables exist
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
         cursor.execute("SELECT * FROM operator_vault ORDER BY id DESC")
         cuts = [dict(row) for row in cursor.fetchall()]
+        
         cursor.execute("SELECT * FROM escrow_vault")
         escrows = [dict(row) for row in cursor.fetchall()]
+        
         cursor.execute("SELECT * FROM client_profiles")
         clients = [dict(row) for row in cursor.fetchall()]
-    except Exception:
-        cuts = []
-        escrows = []
-        clients = []
-    finally:
+        
         conn.close()
+    except Exception as e:
+        error_msg = traceback.format_exc()
+        return f"""
+        <body style="background:#040404;color:#ff6b6b;font-family:sans-serif;padding:40px;">
+            <h2>Database Error Debug View</h2>
+            <pre style="background:#111;padding:20px;border-radius:8px;border:1px solid #333;color:#f5d487;overflow-x:auto;">{error_msg}</pre>
+            <p><a href="/operator/portal" style="color:#b99654;">&#8592; Try Again</a></p>
+        </body>
+        """
     
-    cut_rows = "".join([f"<tr><td>{c['id']}</td><td>{c['contract_id']}</td><td>${c['cut_amount']}</td></tr>" for c in cuts])
+    cut_rows = "".join([f"<tr><td>{c.get('id')}</td><td>{c.get('contract_id')}</td><td>${c.get('cut_amount')}</td></tr>" for c in cuts])
     if not cut_rows:
         cut_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No operator cuts recorded yet.</td></tr>"
 
-    escrow_rows = "".join([f"<tr><td>{e['contract_id']}</td><td>{e['client_email']}</td><td>{e['agent_id']}</td><td>${e['amount']}</td><td>{e['status']}</td></tr>" for e in escrows])
+    escrow_rows = "".join([f"<tr><td>{e.get('contract_id')}</td><td>{e.get('client_email')}</td><td>{e.get('agent_id')}</td><td>${e.get('amount')}</td><td>{e.get('status')}</td></tr>" for e in escrows])
     if not escrow_rows:
         escrow_rows = "<tr><td colspan='5' style='text-align:center;color:#666;'>No active escrows.</td></tr>"
 
-    client_rows = "".join([f"<tr><td>{cl['client_email']}</td><td>{cl['company_name']}</td><td>${cl['balance']}</td></tr>" for cl in clients])
+    client_rows = "".join([f"<tr><td>{cl.get('client_email')}</td><td>{cl.get('company_name')}</td><td>${cl.get('balance')}</td></tr>" for cl in clients])
     if not client_rows:
         client_rows = "<tr><td colspan='3' style='text-align:center;color:#666;'>No registered clients.</td></tr>"
 
