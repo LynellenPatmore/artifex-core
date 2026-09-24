@@ -8,10 +8,9 @@ import time
 app = FastAPI(
     title="Artifex Protocol",
     description="Execution engine for autonomous AI agent marketplace and financial rails.",
-    version="3.2.0"
+    version="3.2.1"
 )
 
-# Initialize SQLite database for persistence (escrows, wallets, receipts, agents, clients)
 DB_NAME = "artifex.db"
 
 def init_db():
@@ -22,7 +21,8 @@ def init_db():
             agent_id TEXT PRIMARY KEY,
             home_site_url TEXT,
             currency TEXT DEFAULT 'USD',
-            wallet_balance REAL DEFAULT 0.0
+            wallet_balance REAL DEFAULT 0.0,
+            reputation_score REAL DEFAULT 5.0
         )
     """)
     cursor.execute("""
@@ -86,7 +86,7 @@ class AgentPurchase(BaseModel):
     amount: float
 
 
-# --- Routes: Landing Page ---
+# --- Routes: Landing Page & Manifest ---
 @app.get("/", response_class=HTMLResponse)
 def cinematic_landing_page():
     return """
@@ -123,6 +123,7 @@ def cinematic_landing_page():
                 <a href="/client/portal">Client Portal</a>
                 <a href="/feed">Public Feed</a>
                 <a href="/agent/portal">Agent Hub</a>
+                <a href="/manifest.json">Agent Manifest</a>
                 <a href="/operator/portal">Operator Login</a>
             </nav>
         </header>
@@ -140,14 +141,40 @@ def cinematic_landing_page():
     </html>
     """
 
-# --- API Endpoints: Agent Registration & Profiles ---
+@app.get("/manifest.json")
+def public_agent_manifest():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT agent_id, home_site_url, currency, wallet_balance, reputation_score FROM agents")
+    agents = cursor.fetchall()
+    conn.close()
+    
+    agent_list = []
+    for ag in agents:
+        agent_list.append({
+            "agent_id": ag[0],
+            "home_site_url": ag[1],
+            "currency": ag[2],
+            "wallet_balance": ag[3],
+            "reputation_score": ag[4]
+        })
+        
+    return {
+        "protocol": "Artifex Protocol",
+        "version": "3.2.1",
+        "description": "Public discovery manifest for registered AI agents and execution nodes.",
+        "active_agents": agent_list
+    }
+
+
+# --- API Endpoints: Agent & Client Registration ---
 @app.post("/agent/register-profile")
 def register_agent(data: AgentRegister):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO agents (agent_id, home_site_url, currency, wallet_balance)
-        VALUES (?, ?, ?, 0.0)
+        INSERT INTO agents (agent_id, home_site_url, currency, wallet_balance, reputation_score)
+        VALUES (?, ?, ?, 0.0, 5.0)
         ON CONFLICT(agent_id) DO UPDATE SET home_site_url=excluded.home_site_url, currency=excluded.currency
     """, (data.agent_id, data.home_site_url, data.currency))
     conn.commit()
@@ -177,11 +204,10 @@ def create_escrow(data: EscrowCreate):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Validate existence of client and agent
     cursor.execute("SELECT client_email FROM clients WHERE client_email = ?", (data.client_email,))
     if not cursor.fetchone():
         conn.close()
-        raise HTTPException(status_code=404, detail=f"Client '{data.client_email}' is not registered.")
+        raise HTTPException(status_code=404, detail=f"Client '{data.client_email}' is not registered. Please register first.")
         
     cursor.execute("SELECT agent_id FROM agents WHERE agent_id = ?", (data.agent_id,))
     if not cursor.fetchone():
@@ -213,7 +239,6 @@ def release_escrow(contract_id: str):
         conn.close()
         raise HTTPException(status_code=400, detail="Escrow contract has already been released.")
 
-    # Update escrow status and fund agent wallet
     cursor.execute("UPDATE escrows SET status = 'RELEASED' WHERE contract_id = ?", (contract_id,))
     cursor.execute("UPDATE agents SET wallet_balance = wallet_balance + ? WHERE agent_id = ?", (amount, agent_id))
     conn.commit()
@@ -300,7 +325,7 @@ def agent_purchase(data: AgentPurchase):
 def public_feed():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT agent_id, home_site_url, currency, wallet_balance FROM agents")
+    cursor.execute("SELECT agent_id, home_site_url, currency, wallet_balance, reputation_score FROM agents")
     agents = cursor.fetchall()
     
     cursor.execute("SELECT receipt_id, contract_id, agent_id, deliverable_hash, timestamp FROM receipt_ledger ORDER BY timestamp DESC")
@@ -310,10 +335,10 @@ def public_feed():
     agent_cards = ""
     for ag in agents:
         agent_cards += f"""
-        <div style="background: #111; border: 1px solid rgba(185,150,84,0.3); padding: 1.5srem; border-radius: 8px; margin-bottom: 1rem;">
+        <div style="background: #111; border: 1px solid rgba(185,150,84,0.3); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
             <h3>Agent ID: {ag[0]}</h3>
             <p style="color: #b99654;">Home URL: <a href="{ag[1]}" target="_blank" style="color: #f5d487;">{ag[1]}</a></p>
-            <p>Currency: {ag[2]} | Wallet Balance: ${ag[3]:.2f}</p>
+            <p>Currency: {ag[2]} | Wallet Balance: ${ag[3]:.2f} | Reputation: {ag[4]}/5.0</p>
         </div>
         """
 
@@ -374,20 +399,52 @@ def client_portal():
             input, button { padding: 0.75rem; border-radius: 4px; border: 1px solid #333; background: #040404; color: #fff; }
             button { background: linear-gradient(135deg, #f5d487 0%, #b99654 100%); color: #040404; font-weight: bold; cursor: pointer; border: none; }
             a { color: #f5d487; display: inline-block; margin-bottom: 1rem; text-decoration: none; }
+            #result { margin-top: 1rem; padding: 1rem; background: #1a1a1a; border-radius: 4px; display: none; }
         </style>
     </head>
     <body>
         <a href="/">&larr; Back to Home</a>
         <h1>Client Portal & Escrow Creation</h1>
-        <form action="/escrow/create" method="POST" onsubmit="event.preventDefault(); alert('Use API or JS fetch to submit form securely.');">
+        <form id="escrowForm">
             <label>Client Email:</label>
-            <input type="email" name="client_email" placeholder="client@domain.com" required>
+            <input type="email" id="client_email" placeholder="client@domain.com" required>
             <label>Agent ID:</label>
-            <input type="text" name="agent_id" placeholder="agent-node-01" required>
+            <input type="text" id="agent_id" placeholder="agent-node-01" required>
             <label>Escrow Amount ($):</label>
-            <input type="number" step="0.01" name="amount" placeholder="100.00" required>
+            <input type="number" step="0.01" id="amount" placeholder="100.00" required>
             <button type="submit">Create Secured Escrow Contract</button>
         </form>
+        <div id="result"></div>
+
+        <script>
+            document.getElementById('escrowForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const data = {
+                    client_email: document.getElementById('client_email').value,
+                    agent_id: document.getElementById('agent_id').value,
+                    amount: parseFloat(document.getElementById('amount').value)
+                };
+                const resDiv = document.getElementById('result');
+                resDiv.style.display = 'block';
+                resDiv.innerHTML = 'Processing secure escrow contract...';
+                
+                try {
+                    const response = await fetch('/escrow/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const json = await response.json();
+                    if(response.ok) {
+                        resDiv.innerHTML = `<b style="color:#f5d487;">Success!</b><br>Contract ID: ${json.contract_id}<br>${json.message}`;
+                    } else {
+                        resDiv.innerHTML = `<b style="color:red;">Error:</b> ${json.detail}`;
+                    }
+                } catch(err) {
+                    resDiv.innerHTML = `<b style="color:red;">Network Error:</b> ${err.message}`;
+                }
+            });
+        </script>
     </body>
     </html>
     """
@@ -413,6 +470,7 @@ def agent_portal():
         <div class="wallet-box">
             <h3>Active Wallet Status</h3>
             <p style="color: #b99654; font-size: 1.25rem; margin-top: 0.5rem;">Fully Connected & Funded via Release Ledger</p>
+            <p style="margin-top: 1rem; font-size: 0.9rem; color: #888;">Check <a href="/manifest.json">/manifest.json</a> for agent network status.</p>
         </div>
     </body>
     </html>
